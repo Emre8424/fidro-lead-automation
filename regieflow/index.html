@@ -256,7 +256,23 @@ async function newRegie(c){
   c.innerHTML='<div class="card" style="max-width:720px;margin:auto"><h3>Neue Regie</h3><div class="field"><label class="label">Projekt *</label><select id="np" class="select">'+(p.data||[]).map(x=>'<option value="'+x.id+'">'+esc(x.project_number)+' · '+esc(x.name)+'</option>').join("")+'</select></div><div class="field"><label class="label">Vorher-Bild(er) *</label><input id="nf" class="input" type="file" accept="image/jpeg,image/png,image/webp" multiple capture="environment"><div class="small muted">Mindestens ein Bild von dem, was verändert werden muss.</div></div><div class="field"><label class="label">Beschreibung *</label><textarea id="nd" class="area"></textarea></div><div class="grid g2"><div class="field"><label class="label">Geschätzter Aufwand *</label><input id="ne" class="input" placeholder="z. B. ca. 1 Stunde"></div><div class="field"><label class="label">Minuten optional</label><input id="nm" class="input" type="number" min="1"></div></div><div class="notice warn">Nur eine unverbindliche Schätzung. Abrechnung nach effektivem Aufwand.</div><button id="ng" class="btn primary" style="width:100%;margin-top:14px">Absenden</button></div>';
   document.getElementById("ng").onclick=async()=>{const files=Array.from(document.getElementById("nf").files);if(!files.length)return toast("Mindestens ein Vorher-Bild ist Pflicht.");try{const o=await rpc("rf_create_internal_regie",{p_project_id:document.getElementById("np").value,p_description:document.getElementById("nd").value.trim(),p_estimate_label:document.getElementById("ne").value.trim(),p_estimate_minutes:Number(document.getElementById("nm").value)||null,p_assigned_monteur_user_id:null});for(const f of files)await upload({regieId:o.regieId,versionId:o.versionId,kind:"before",folder:"before",file:f});const st=await rpc("rf_submit_regie_version",{p_regie_id:o.regieId,p_version_id:o.versionId});toast("Gesendet: "+sl(st));S.tab="regies";renderShell();await renderTab()}catch(e){toast(em(e))}}
 }
-async function regies(c){const rows=await getRegies();c.innerHTML='<div class="card"><div class="between"><h3>Regien</h3><button id="rn" class="btn primary">+ Neue Regie</button></div>'+regieTable(rows)+'</div>';document.getElementById("rn").onclick=async()=>{S.tab="new";renderShell();await renderTab()};bindRows()}
+async function regies(c){
+  const rows=await getRegies();
+  const groups={
+    open:rows.filter(r=>["customer_request","draft","submitted","internal_review","awaiting_customer"].includes(r.status)),
+    running:rows.filter(r=>["approved","in_execution","work_completed","awaiting_rapport"].includes(r.status)),
+    archive:rows.filter(r=>["closed","rejected"].includes(r.status))
+  };
+  const draw=key=>{
+    document.querySelectorAll("[data-rfilt]").forEach(b=>b.classList.toggle("primary",b.dataset.rfilt===key));
+    const box=document.getElementById("regieList");
+    if(box){box.innerHTML=regieTable(groups[key]||rows);bindRows()}
+  };
+  c.innerHTML='<div class="card"><div class="between"><div><h3 style="margin:0">Regien</h3><div class="small muted">Offene, laufende und abgeschlossene Regien getrennt.</div></div>'+(has("regies.create")?'<button id="rn" class="btn primary">+ Neue Regie</button>':"")+'</div><div class="row wrap" style="margin-top:14px"><button class="btn primary" data-rfilt="open">Offen · '+groups.open.length+'</button><button class="btn" data-rfilt="running">Laufend · '+groups.running.length+'</button><button class="btn" data-rfilt="archive">Archiv · '+groups.archive.length+'</button></div><div id="regieList" style="margin-top:8px">'+regieTable(groups.open)+'</div></div>';
+  document.querySelectorAll("[data-rfilt]").forEach(b=>b.onclick=()=>draw(b.dataset.rfilt));
+  if(document.getElementById("rn"))document.getElementById("rn").onclick=async()=>{S.tab="new";renderShell();await renderTab()};
+  bindRows();
+}
 async function openRegie(id){
   const r0=await sb.from("rf_regie_overview").select("*").eq("id",id).single();if(r0.error)return toast(em(r0.error));const r=r0.data;
   const a=await Promise.all([sb.from("rf_regie_versions").select("*").eq("regie_id",id).order("version_no",{ascending:false}),sb.from("rf_regie_files").select("*").eq("regie_id",id).order("created_at")]),vers=a[0].data||[],files=a[1].data||[],vids=vers.map(v=>v.id);let docs=[];if(vids.length){const d=await sb.from("rf_documents").select("*").in("version_id",vids).order("created_at",{ascending:false});docs=d.data||[]}
