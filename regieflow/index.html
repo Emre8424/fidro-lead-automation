@@ -248,7 +248,7 @@ async function openRegie(id){
   const r0=await sb.from("rf_regie_overview").select("*").eq("id",id).single();if(r0.error)return toast(em(r0.error));const r=r0.data;
   const a=await Promise.all([sb.from("rf_regie_versions").select("*").eq("regie_id",id).order("version_no",{ascending:false}),sb.from("rf_regie_files").select("*").eq("regie_id",id).order("created_at")]),vers=a[0].data||[],files=a[1].data||[],vids=vers.map(v=>v.id);let docs=[];if(vids.length){const d=await sb.from("rf_documents").select("*").in("version_id",vids).order("created_at",{ascending:false});docs=d.data||[]}
   const pics=[];for(const f of files){try{pics.push({f:f,url:await signed(f.storage_path)})}catch{}}
-  let acts="";if(r.status==="customer_request"&&(has("regies.review")||has("regies.create")))acts+='<button id="reqok" class="btn primary">Anfrage übernehmen</button><button id="reqno" class="btn">Ablehnen</button>';
+  let acts="";if(r.status==="customer_request"&&has("regies.review"))acts+='<button id="reqok" class="btn primary">Anfrage übernehmen</button><button id="reqno" class="btn">Ablehnen</button>';
   if(r.status==="draft"&&has("regies.create")&&!r.current_version_id)acts+='<button id="prepare" class="btn primary">Regie aus Anfrage vorbereiten</button>';
   if(r.status==="draft"&&has("regies.create")&&r.current_version_id)acts+='<button id="editDraft" class="btn">Entwurf bearbeiten</button><button id="draftPhoto" class="btn">Vorher-Bild hinzufügen</button><button id="draftSubmit" class="btn primary">Zur Freigabe senden</button>';
   if(r.status==="internal_review"&&has("regies.review"))acts+='<button id="irok" class="btn primary">Büro bestätigt</button><button id="irno" class="btn">Ablehnen</button>';
