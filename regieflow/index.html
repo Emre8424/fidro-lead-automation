@@ -435,13 +435,21 @@ async function settings(c){
 async function notifications(c){
   const r=await sb.from("rf_notifications").select("*").order("created_at",{ascending:false}).limit(100);
   if(r.error)throw r.error;
-  const rows=r.data||[];
-  c.innerHTML='<div class="card"><div class="between"><div><h3 style="margin:0">Mitteilungen</h3><div class="small muted">Klick auf eine Mitteilung, um direkt zur Regie zu springen.</div></div><button id="read" class="btn">Alle gelesen</button></div><div class="notif-list">'+(rows.length?rows.map(n=>{const title=nh(n.title),body=nh(n.body||""),showBody=body&&!body.startsWith("Status:")&&!body.startsWith("Der Status wurde");return '<button class="notif-item '+(n.read_at?"":"unread")+'" data-nid="'+n.id+'" data-nregie="'+(n.regie_id||"")+'"><div class="notif-row"><div><div class="notif-title"><strong>'+esc(title)+'</strong></div>'+(showBody?'<div class="small muted" style="margin-top:3px">'+esc(body)+'</div>':"")+'<div class="tiny muted" style="margin-top:4px">'+fmt(n.created_at)+'</div></div>'+(n.regie_id?'<span class="notif-arrow">›</span>':"")+'</div></button>'}).join(""):'<div class="empty">Keine Mitteilungen.</div>')+'</div>';
-  document.querySelectorAll("[data-nid]").forEach(el=>el.onclick=async()=>{
-    const nid=el.dataset.nid,rid=el.dataset.nregie;
-    if(el.classList.contains("unread")){
-      await sb.from("rf_notifications").update({read_at:new Date().toISOString()}).eq("id",nid);
-      if(S.unread>0)S.unread--;
+  const rows=r.data||[],groups=[],byKey=new Map();
+  for(const n of rows){
+    const key=n.regie_id?"r:"+n.regie_id:"n:"+n.id;
+    let g=byKey.get(key);
+    if(!g){g={key,latest:n,count:0,unread:0,ids:[]};byKey.set(key,g);groups.push(g)}
+    g.count++;g.ids.push(n.id);if(!n.read_at)g.unread++;
+  }
+  c.innerHTML='<div class="card"><div class="between"><h3 style="margin:0">Mitteilungen</h3><button id="read" class="btn">Alle gelesen</button></div><div class="notif-list">'+(groups.length?groups.map(g=>{const n=g.latest,title=nh(n.title),body=nh(n.body||""),showBody=body&&!body.startsWith("Status:")&&!body.startsWith("Der Status wurde");return '<button class="notif-item '+(g.unread?"unread":"")+'" data-ng="'+esc(g.key)+'" data-nregie="'+(n.regie_id||"")+'"><div class="notif-row"><div><div class="notif-title"><strong>'+esc(title)+'</strong></div>'+(showBody?'<div class="small muted" style="margin-top:3px">'+esc(body)+'</div>':"")+'<div class="tiny muted" style="margin-top:4px">'+fmt(n.created_at)+(g.count>1?' · '+g.count+' Ereignisse':"")+'</div></div>'+(n.regie_id?'<span class="notif-arrow">›</span>':"")+'</div></button>'}).join(""):'<div class="empty">Keine Mitteilungen.</div>')+'</div>';
+  document.querySelectorAll("[data-ng]").forEach(el=>el.onclick=async()=>{
+    const key=el.dataset.ng,rid=el.dataset.nregie,g=byKey.get(key);
+    if(g&&g.unread){
+      let q=sb.from("rf_notifications").update({read_at:new Date().toISOString()}).is("read_at",null);
+      if(rid)q=q.eq("regie_id",rid);else q=q.in("id",g.ids);
+      const z=await q;if(z.error)return toast(em(z.error));
+      S.unread=Math.max(0,S.unread-g.unread);
     }
     if(!rid)return renderTab();
     if(S.kind==="internal"){
