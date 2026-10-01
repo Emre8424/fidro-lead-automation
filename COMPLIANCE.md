@@ -42,6 +42,18 @@ The production first-contact template:
 - tells the recipient how to opt out with STOP,
 - links to FIDRO's privacy notice.
 
+## Conservative follow-up
+
+An optional follow-up module is implemented but disabled by default. When explicitly enabled after the full production gate:
+- at most **one** follow-up is scheduled,
+- the delay is 48 hours,
+- it is sent only with a separately approved Meta marketing template,
+- it is cancelled immediately when the customer replies or opts out,
+- it is sent only while global automation is active,
+- it respects the same documented opt-in, adult, suppression-list and Meta production controls,
+- it runs only Monday–Saturday during the configured outreach window,
+- stale jobs expire instead of being sent late.
+
 ## Opt-out
 
 Opt-out requests stop automation. Manual opt-outs and WhatsApp opt-outs are logged. A previous opt-in is not treated as active after an opt-out.
