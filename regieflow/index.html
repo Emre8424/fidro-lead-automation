@@ -146,7 +146,7 @@ function pushEnabled(){return typeof Notification!=="undefined"&&Notification.pe
 async function init(){
   await registerSW();
   if(q("approve"))return publicApproval(q("approve"));
-  if(q("setup"))return setupPage(q("setup"));
+  if(q("setup"))return login("Dieser Entwicklungs-Setup-Link ist nicht mehr aktiv.");
   if(q("invite"))return invitePage(q("invite"));
   const r=await sb.auth.getSession();S.session=r.data.session;
   if(q("recovery")){
