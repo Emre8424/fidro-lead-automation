@@ -315,21 +315,36 @@ async function publicApproval(token){
     document.getElementById("pa").onclick=async()=>{if(!s.ok)return toast("Bitte unterschreiben.");try{if(!document.getElementById("pconsent").checked)return toast("Bitte die Freigabeerklärung bestätigen.");const o=await invoke("rf-public-approval",{token:token,action:"approve",signerName:document.getElementById("pn").value,signatureDataUrl:s.data(),consentAccepted:true});app.innerHTML='<div class="auth"><div class="card"><div class="notice ok"><strong>Freigabe bestätigt.</strong><br>PDF und Nachweis wurden gesperrt und archiviert.</div>'+(o.pdfUrl?'<p><a class="btn primary" href="'+esc(o.pdfUrl)+'" target="_blank" style="display:inline-block;text-decoration:none">PDF öffnen</a></p>':"")+'</div></div>'}catch(e){toast(em(e))}}
   }catch(e){app.innerHTML='<div class="auth"><div class="card"><div class="notice bad"><strong>Freigabe nicht verfügbar.</strong><br>'+esc(em(e))+'</div></div></div>'}
 }
+function contextOptions(){
+  return [
+    ...(S.ctx?.internal||[]).map(x=>({kind:"internal",companyId:x.companyId,companyName:x.companyName,label:x.companyName+" · Intern"})),
+    ...(S.ctx?.customer||[]).map(x=>({kind:"customer",companyId:x.companyId,companyName:x.companyName,label:x.companyName+" · Kunde"}))
+  ];
+}
 async function context(){
   S.ctx=await rpc("rf_my_context");
-  if((S.ctx.internal||[]).length){S.kind="internal";S.companyId=S.ctx.internal[0].companyId}
-  else if((S.ctx.customer||[]).length){S.kind="customer";S.companyId=S.ctx.customer[0].companyId}
-  else{app.innerHTML='<div class="auth"><div class="card"><h2>Kein RegieFlow-Zugang</h2><p class="muted">Das Konto ist noch keiner Firma oder Kundenbeziehung zugeordnet.</p><button id="lo" class="btn">Abmelden</button></div></div>';document.getElementById("lo").onclick=logout;return}
+  const opts=contextOptions();
+  if(!opts.length){
+    app.innerHTML='<div class="auth"><div class="card"><h2>Kein RegieFlow-Zugang</h2><p class="muted">Das Konto ist noch keiner Firma oder Kundenbeziehung zugeordnet.</p><button id="lo" class="btn">Abmelden</button></div></div>';
+    document.getElementById("lo").onclick=logout;
+    return;
+  }
+  let chosen=opts.find(x=>x.kind===S.kind&&x.companyId===S.companyId);
+  if(!chosen)chosen=opts.find(x=>x.kind==="internal")||opts[0];
+  await activateContext(chosen.kind,chosen.companyId,q("regie"));
+}
+async function activateContext(kind,companyId,pendingRegie=null){
+  S.kind=kind;S.companyId=companyId;
   if(S.kind==="internal"){
     const access=(S.ctx.internal||[]).find(x=>x.companyId===S.companyId);
-    if(access&&access.mustChangePassword){
-      return forcePasswordChange();
-    }
+    if(access?.mustChangePassword)return forcePasswordChange();
   }
-  const r=await sb.from("rf_companies").select("*").eq("id",S.companyId).single();if(r.error)throw r.error;S.company=r.data;
+  const r=await sb.from("rf_companies").select("*").eq("id",S.companyId).single();
+  if(r.error)throw r.error;
+  S.company=r.data;
   document.documentElement.style.setProperty("--accent",S.company.accent_color||"#111827");
-  S.logoUrl=null;if(S.company.logo_path){try{S.logoUrl=await signed(S.company.logo_path,"rf-branding")}catch{}}
-  const pendingRegie=q("regie");
+  S.logoUrl=null;
+  if(S.company.logo_path){try{S.logoUrl=await signed(S.company.logo_path,"rf-branding")}catch{}}
   await realtime();
   S.tab=pendingRegie&&S.kind==="internal"?"regies":"home";
   renderShell();await renderTab();
@@ -355,8 +370,11 @@ async function forcePasswordChange(){
 }
 async function realtime(){
   if(S.channel)await sb.removeChannel(S.channel);
-  const n=await sb.from("rf_notifications").select("*",{count:"exact",head:true}).is("read_at",null);S.unread=n.count||0;
-  S.channel=sb.channel("rf-"+S.companyId).on("postgres_changes",{event:"INSERT",schema:"public",table:"rf_notifications"},()=>{S.unread++;toast("Neue RegieFlow-Aktivität");renderShell()}).on("postgres_changes",{event:"UPDATE",schema:"public",table:"rf_regies"},()=>{if(S.tab==="home"||S.tab==="regies"||S.tab==="archive")renderTab()}).subscribe()
+  const n=await sb.from("rf_notifications").select("*",{count:"exact",head:true}).eq("company_id",S.companyId).is("read_at",null);S.unread=n.count||0;
+  S.channel=sb.channel("rf-"+S.companyId)
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"rf_notifications",filter:"company_id=eq."+S.companyId},()=>{S.unread++;toast("Neue RegieFlow-Aktivität");renderShell()})
+    .on("postgres_changes",{event:"UPDATE",schema:"public",table:"rf_regies",filter:"company_id=eq."+S.companyId},()=>{if(S.tab==="home"||S.tab==="regies"||S.tab==="archive")renderTab()})
+    .subscribe()
 }
 async function logout(){await sb.auth.signOut();if(S.channel)await sb.removeChannel(S.channel);Object.assign(S,{session:null,ctx:null,kind:null,companyId:null,company:null,tab:"home",channel:null,unread:0});login()}
 function nav(){
@@ -375,9 +393,12 @@ function renderShell(){
   const items=nav();
   const access=S.kind==="internal"?(S.ctx?.internal||[]).find(x=>x.companyId===S.companyId):(S.ctx?.customer||[]).find(x=>x.companyId===S.companyId);
   const readOnly=access?.writeEnabled===false;
-  app.innerHTML='<div class="shell"><aside class="side"><div class="brand"><div class="mark">'+mark()+'</div><div><strong>'+esc(S.company.name)+'</strong><div class="small muted">RegieFlow</div></div></div><div class="nav">'+items.map(x=>'<button data-tab="'+x[0]+'" class="'+(S.tab===x[0]?"active":"")+'">'+esc(x[1])+(x[0]==="notifications"&&S.unread?' <span class="badge">'+S.unread+'</span>':"")+'</button>').join("")+'</div><div style="position:absolute;left:14px;right:14px;bottom:18px"><button id="push" class="btn" style="width:100%;margin-bottom:7px">'+(pushEnabled()?"Push aktiviert":"Push aktivieren")+'</button><button id="logout" class="btn" style="width:100%">Abmelden</button></div></aside><main class="main"><header class="top"><strong>'+esc((items.find(x=>x[0]===S.tab)||["","RegieFlow"])[1])+'</strong><div class="row"><span class="small muted">'+esc(S.kind==="customer"?"Kunde":internalArea())+'</span><button id="pushTop" class="btn">'+(pushEnabled()?"🔔":"Push")+'</button><button id="logoutTop" class="btn">Abmelden</button></div></header>'+(readOnly?'<div class="content" style="padding-bottom:0"><div class="notice warn"><strong>Nur-Lesen-Modus</strong><br>Das Firmenabo ist derzeit nicht aktiv. Bestehende Projekte, Regien und Dokumente bleiben verfügbar.</div></div>':"")+'<div id="content" class="content"></div></main></div><div class="mobilebar">'+items.slice(0,5).map(x=>'<button data-tab="'+x[0]+'">'+esc(x[1])+'</button>').join("")+'</div>';
+  const ctxs=contextOptions();
+  const ctxSelect=ctxs.length>1?'<select id="ctxswitch" class="select" style="width:auto;max-width:220px;padding:7px 28px 7px 9px">'+ctxs.map(x=>'<option value="'+esc(x.kind+"|"+x.companyId)+'" '+(x.kind===S.kind&&x.companyId===S.companyId?"selected":"")+'>'+esc(x.label)+'</option>').join("")+'</select>':"";
+  app.innerHTML='<div class="shell"><aside class="side"><div class="brand"><div class="mark">'+mark()+'</div><div><strong>'+esc(S.company.name)+'</strong><div class="small muted">RegieFlow</div></div></div><div class="nav">'+items.map(x=>'<button data-tab="'+x[0]+'" class="'+(S.tab===x[0]?"active":"")+'">'+esc(x[1])+(x[0]==="notifications"&&S.unread?' <span class="badge">'+S.unread+'</span>':"")+'</button>').join("")+'</div><div style="position:absolute;left:14px;right:14px;bottom:18px"><button id="push" class="btn" style="width:100%;margin-bottom:7px">'+(pushEnabled()?"Push aktiviert":"Push aktivieren")+'</button><button id="logout" class="btn" style="width:100%">Abmelden</button></div></aside><main class="main"><header class="top"><strong>'+esc((items.find(x=>x[0]===S.tab)||["","RegieFlow"])[1])+'</strong><div class="row">'+ctxSelect+'<span class="small muted">'+esc(S.kind==="customer"?"Kunde":internalArea())+'</span><button id="pushTop" class="btn">'+(pushEnabled()?"🔔":"Push")+'</button><button id="logoutTop" class="btn">Abmelden</button></div></header>'+(readOnly?'<div class="content" style="padding-bottom:0"><div class="notice warn"><strong>Nur-Lesen-Modus</strong><br>Das Firmenabo ist derzeit nicht aktiv. Bestehende Projekte, Regien und Dokumente bleiben verfügbar.</div></div>':"")+'<div id="content" class="content"></div></main></div><div class="mobilebar">'+items.slice(0,5).map(x=>'<button data-tab="'+x[0]+'">'+esc(x[1])+'</button>').join("")+'</div>';
   document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=async()=>{S.tab=b.dataset.tab;renderShell();await renderTab()});
-  document.getElementById("logout").onclick=logout;document.getElementById("logoutTop").onclick=logout;document.getElementById("push").onclick=enablePush;document.getElementById("pushTop").onclick=enablePush
+  document.getElementById("logout").onclick=logout;document.getElementById("logoutTop").onclick=logout;document.getElementById("push").onclick=enablePush;document.getElementById("pushTop").onclick=enablePush;
+  if(document.getElementById("ctxswitch"))document.getElementById("ctxswitch").onchange=async e=>{const [kind,id]=e.target.value.split("|");await activateContext(kind,id)}
 }
 async function renderTab(){
   const c=document.getElementById("content");if(!c)return;c.innerHTML='<div class="card muted">Laden…</div>';
@@ -588,7 +609,7 @@ async function accountPage(c){
   document.getElementById("cpw").onclick=passwordDialog;
 }
 async function notifications(c){
-  const r=await sb.from("rf_notifications").select("*").order("created_at",{ascending:false}).limit(100);
+  const r=await sb.from("rf_notifications").select("*").eq("company_id",S.companyId).order("created_at",{ascending:false}).limit(100);
   if(r.error)throw r.error;
   const rows=r.data||[],groups=[],byKey=new Map();
   for(const n of rows){
