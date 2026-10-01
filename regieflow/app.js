@@ -220,7 +220,7 @@ async function legalPage(section){
   if(!names[section])section="imprint";
   app.innerHTML='<div class="auth" style="max-width:820px"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">'+esc(names[section])+'</div></div></div><div class="card" id="legalcontent"><div class="muted">Laden…</div></div></div>';
   try{
-    const data=await rpc("rf_public_legal");
+    const data=await invoke("rf-public-legal",{});
     if(!data?.published){
       document.getElementById("legalcontent").innerHTML='<h2>'+esc(names[section])+'</h2><div class="notice warn">Diese Angaben werden vor dem öffentlichen Launch veröffentlicht.</div><button id="legalback" class="btn" style="margin-top:14px">Zurück</button>';
     }else{
