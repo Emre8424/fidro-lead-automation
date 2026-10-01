@@ -329,11 +329,12 @@ async function context(){
     return;
   }
   let chosen=opts.find(x=>x.kind===S.kind&&x.companyId===S.companyId);
+  if(!chosen){const saved=localStorage.getItem("rf_context")||"";chosen=opts.find(x=>saved===x.kind+"|"+x.companyId)}
   if(!chosen)chosen=opts.find(x=>x.kind==="internal")||opts[0];
   await activateContext(chosen.kind,chosen.companyId,q("regie"));
 }
 async function activateContext(kind,companyId,pendingRegie=null){
-  S.kind=kind;S.companyId=companyId;
+  S.kind=kind;S.companyId=companyId;localStorage.setItem("rf_context",kind+"|"+companyId);
   if(S.kind==="internal"){
     const access=(S.ctx.internal||[]).find(x=>x.companyId===S.companyId);
     if(access?.mustChangePassword)return forcePasswordChange();
