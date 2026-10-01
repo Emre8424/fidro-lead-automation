@@ -148,11 +148,21 @@ async function init(){
   if(q("approve"))return publicApproval(q("approve"));
   if(q("setup"))return setupPage(q("setup"));
   if(q("invite"))return invitePage(q("invite"));
-  const r=await sb.auth.getSession();S.session=r.data.session;if(!S.session)return login();await context()
+  const r=await sb.auth.getSession();S.session=r.data.session;
+  if(q("recovery")){
+    if(!S.session)return login("Öffne den Passwort-Link aus deiner E-Mail erneut.");
+    return recoveryPage();
+  }
+  if(!S.session)return login();await context()
 }
 function login(msg){
-  app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Regie im Griff.</div></div></div><div class="card"><h2>Anmelden</h2>'+(msg?'<div class="notice">'+esc(msg)+'</div>':"")+'<div class="field"><label class="label">E-Mail</label><input id="email" class="input" type="email"></div><div class="field"><label class="label">Passwort</label><input id="pass" class="input" type="password"></div><button id="go" class="btn primary" style="width:100%">Anmelden</button></div></div>';
-  document.getElementById("go").onclick=async()=>{try{const r=await sb.auth.signInWithPassword({email:document.getElementById("email").value.trim(),password:document.getElementById("pass").value});if(r.error)throw r.error;S.session=r.data.session;await context()}catch(e){toast(em(e))}}
+  app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Regie im Griff.</div></div></div><div class="card"><h2>Anmelden</h2>'+(msg?'<div class="notice">'+esc(msg)+'</div>':"")+'<div class="field"><label class="label">E-Mail</label><input id="email" class="input" type="email"></div><div class="field"><label class="label">Passwort</label><input id="pass" class="input" type="password"></div><button id="go" class="btn primary" style="width:100%">Anmelden</button><button id="forgot" class="btn" style="width:100%;margin-top:8px">Passwort vergessen?</button></div></div>';
+  document.getElementById("go").onclick=async()=>{try{const r=await sb.auth.signInWithPassword({email:document.getElementById("email").value.trim(),password:document.getElementById("pass").value});if(r.error)throw r.error;S.session=r.data.session;await context()}catch(e){toast(em(e))}};
+  document.getElementById("forgot").onclick=async()=>{const email=document.getElementById("email").value.trim();if(!email)return toast("Bitte zuerst deine E-Mail eingeben.");try{const r=await sb.auth.resetPasswordForEmail(email,{redirectTo:APP+"?recovery=1"});if(r.error)throw r.error;toast("Passwort-Link wurde gesendet.")}catch(e){toast(em(e))}}
+}
+function recoveryPage(){
+  app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Passwort zurücksetzen</div></div></div><div class="card"><h2>Neues Passwort</h2><div class="field"><label class="label">Neues Passwort</label><input id="rp1" class="input" type="password" autocomplete="new-password" placeholder="mindestens 10 Zeichen"></div><div class="field"><label class="label">Wiederholen</label><input id="rp2" class="input" type="password" autocomplete="new-password"></div><button id="rpg" class="btn primary" style="width:100%">Passwort speichern</button></div></div>';
+  document.getElementById("rpg").onclick=async()=>{const p1=document.getElementById("rp1").value,p2=document.getElementById("rp2").value;if(p1.length<10)return toast("Passwort muss mindestens 10 Zeichen lang sein.");if(p1!==p2)return toast("Die Passwörter stimmen nicht überein.");try{const r=await sb.auth.updateUser({password:p1});if(r.error)throw r.error;history.replaceState({},"",APP);toast("Passwort geändert.");await context()}catch(e){toast(em(e))}}
 }
 async function setupPage(token){
   app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Entwicklungs-Setup</div></div></div><div class="card"><h2>Firma einrichten</h2><div class="notice">Einmaliger Setup-Link für die erste RegieFlow-Firma.</div><div class="field"><label class="label">Firmenname</label><input id="sc" class="input" placeholder="Elektro Muster AG"></div><div class="field"><label class="label">Dein Name</label><input id="sn" class="input"></div><div class="field"><label class="label">E-Mail</label><input id="se" class="input" type="email"></div><div class="field"><label class="label">Passwort</label><input id="sp" class="input" type="password" placeholder="mindestens 10 Zeichen"></div><button id="sg" class="btn primary" style="width:100%">RegieFlow starten</button></div></div>';
