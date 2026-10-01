@@ -1,1 +1,19 @@
-{"name":"RegieFlow","short_name":"RegieFlow","start_url":"index.html","scope":"./","display":"standalone","background_color":"#f5f6f7","theme_color":"#111827","description":"Digitale Regiefreigabe"}
+{
+  "id": "./",
+  "name": "RegieFlow",
+  "short_name": "RegieFlow",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f7",
+  "theme_color": "#111827",
+  "description": "Digitale Regiefreigabe für Projekte und Baustellen",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
