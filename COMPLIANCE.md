@@ -99,11 +99,23 @@ The system records relevant events including:
 - Browser CORS is restricted to the GitHub Pages operator origin.
 - The operator UI uses a restrictive Content Security Policy and supports explicit sign-out.
 
+## Controlled production test
+
+Before broad activation, the system requires one real end-to-end test through the production WhatsApp number. The test:
+- can only be started after all pre-test readiness controls are green,
+- requires an operator-controlled / explicitly permitted Swiss WhatsApp number,
+- runs while global automation remains paused,
+- permits only the designated synthetic production-test lead to bypass the global pause,
+- must traverse the actual Meta outbound template, inbound webhook and booking dialogue,
+- is marked passed only after a confirmed appointment has been created and exactly two email drafts exist,
+- remains a hard activation gate,
+- is automatically cleaned from the production tables when global automation is activated, while the pass timestamp is retained.
+
 ## Production gate
 
-Do not activate production unless every readiness check is green and a real production test has completed successfully.
+Do not activate production unless every readiness check is green, including the real production E2E test.
 
-The remaining external dependencies are intentionally fail-closed: Meta template approval and operator-key rotation cannot be bypassed by the UI.
+The remaining external dependencies are intentionally fail-closed: Meta template approval, FIDRO business-use authorization, operator-key rotation and the E2E test cannot be bypassed by the normal operator UI.
 
 ## Legal / governance note
 
