@@ -90,11 +90,11 @@ async function invoke(name,body){
     else if(data&&data.error&&data.error.message)msg=String(data.error.message);
     else if(data&&data.message)msg=String(data.message);
     else if(data)try{msg=JSON.stringify(data)}catch{}
-    throw new Error(msg);
+    const err=new Error(msg);if(data&&data.code)err.code=data.code;throw err;
   }
   if(data&&data.error){
     const rawErr=data.error;
-    throw new Error(typeof rawErr==="string"?rawErr:(rawErr&&rawErr.message?String(rawErr.message):JSON.stringify(rawErr)));
+    const err=new Error(typeof rawErr==="string"?rawErr:(rawErr&&rawErr.message?String(rawErr.message):JSON.stringify(rawErr)));if(data.code)err.code=data.code;throw err;
   }
   return data;
 }
@@ -143,8 +143,10 @@ function pushEnabled(){return typeof Notification!=="undefined"&&Notification.pe
 async function init(){
   await registerSW();
   if(q("approve"))return publicApproval(q("approve"));
-  if(q("setup"))return login("Dieser Entwicklungs-Setup-Link ist nicht mehr aktiv.");
   if(q("invite"))return invitePage(q("invite"));
+  if(q("signup_success"))return signupSuccessPage(q("signup_success"));
+  if(q("signup"))return signupPage(q("cancelled")==="1");
+  if(q("setup"))return login("Dieser Entwicklungs-Setup-Link ist nicht mehr aktiv.");
   const r=await sb.auth.getSession();S.session=r.data.session;
   if(q("recovery")){
     if(!S.session)return login("Öffne den Passwort-Link aus deiner E-Mail erneut.");
@@ -165,9 +167,66 @@ async function openDeepLink(){
   }
 }
 function login(msg){
-  app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Regie im Griff.</div></div></div><div class="card"><h2>Anmelden</h2>'+(msg?'<div class="notice">'+esc(msg)+'</div>':"")+'<div class="field"><label class="label">E-Mail</label><input id="email" class="input" type="email"></div><div class="field"><label class="label">Passwort</label><input id="pass" class="input" type="password"></div><button id="go" class="btn primary" style="width:100%">Anmelden</button><button id="forgot" class="btn" style="width:100%;margin-top:8px">Passwort vergessen?</button></div></div>';
+  app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Regie im Griff.</div></div></div><div class="card"><h2>Anmelden</h2>'+(msg?'<div class="notice">'+esc(msg)+'</div>':"")+'<div class="field"><label class="label">E-Mail</label><input id="email" class="input" type="email" autocomplete="email"></div><div class="field"><label class="label">Passwort</label><input id="pass" class="input" type="password" autocomplete="current-password"></div><button id="go" class="btn primary" style="width:100%">Anmelden</button><button id="forgot" class="btn" style="width:100%;margin-top:8px">Passwort vergessen?</button><hr style="border:0;border-top:1px solid var(--line);margin:20px 0"><div class="small muted" style="text-align:center;margin-bottom:10px">Noch keine Firma bei RegieFlow?</div><button id="signupgo" class="btn" style="width:100%">Firma registrieren</button></div></div>';
   document.getElementById("go").onclick=async()=>{try{const r=await sb.auth.signInWithPassword({email:document.getElementById("email").value.trim(),password:document.getElementById("pass").value});if(r.error)throw r.error;S.session=r.data.session;await context();await openDeepLink()}catch(e){toast(em(e))}};
-  document.getElementById("forgot").onclick=async()=>{const email=document.getElementById("email").value.trim();if(!email)return toast("Bitte zuerst deine E-Mail eingeben.");try{const r=await sb.auth.resetPasswordForEmail(email,{redirectTo:APP+"?recovery=1"});if(r.error)throw r.error;toast("Passwort-Link wurde gesendet.")}catch(e){toast(em(e))}}
+  document.getElementById("forgot").onclick=async()=>{const email=document.getElementById("email").value.trim();if(!email)return toast("Bitte zuerst deine E-Mail eingeben.");try{const r=await sb.auth.resetPasswordForEmail(email,{redirectTo:APP+"?recovery=1"});if(r.error)throw r.error;toast("Passwort-Link wurde gesendet.")}catch(e){toast(em(e))}};
+  document.getElementById("signupgo").onclick=()=>{history.pushState({},"",APP+"?signup=1");signupPage(false)};
+}
+function signupPage(cancelled=false){
+  const plans=[
+    {id:"starter",name:"Starter",price:29,seats:3,extra:6},
+    {id:"team",name:"Team",price:59,seats:10,extra:5},
+    {id:"business",name:"Business",price:199,seats:50,extra:4}
+  ];
+  app.innerHTML='<div class="auth" style="max-width:980px"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Firma registrieren</div></div></div>'+(cancelled?'<div class="notice warn" style="margin-bottom:14px">Zahlung wurde abgebrochen. Es wurde nichts aktiviert.</div>':"")+'<div class="card"><div class="between"><div><h2 style="margin:0">RegieFlow für deine Firma</h2><div class="muted">Kundenkonten, Projekte und Regien sind unbegrenzt. Bezahlt werden nur interne Profile.</div></div><button id="backlogin" class="btn">Anmelden</button></div><div class="grid g3" style="margin-top:18px">'+plans.map((p,i)=>'<label class="card click" style="margin:0;display:block"><input type="radio" name="signupplan" value="'+p.id+'" '+(i===1?"checked":"")+' style="margin-right:8px"><strong>'+p.name+'</strong><div class="metric" style="margin-top:8px">CHF '+p.price+'<span class="small muted"> / Monat</span></div><div class="small">'+p.seats+' interne Profile inklusive</div><div class="small muted">danach CHF '+p.extra+' / zusätzliches Profil</div></label>').join("")+'</div><div class="grid g2" style="margin-top:16px"><div class="field"><label class="label">Firmenname</label><input id="scompany" class="input" autocomplete="organization"></div><div class="field"><label class="label">Dein Name</label><input id="sowner" class="input" autocomplete="name"></div></div><div class="field"><label class="label">E-Mail</label><input id="semail" class="input" type="email" autocomplete="email"></div><div class="notice" style="margin-top:12px">Nach der Zahlung legst du dein RegieFlow-Passwort fest. Die Firma wird erst nach bestätigter Zahlung aktiviert.</div><button id="startcheckout" class="btn primary" style="width:100%;margin-top:14px">Weiter zur sicheren Zahlung</button></div></div>';
+  document.getElementById("backlogin").onclick=()=>{history.replaceState({},"",APP);login()};
+  document.getElementById("startcheckout").onclick=async()=>{try{
+    const plan=document.querySelector('input[name="signupplan"]:checked')?.value;
+    const o=await invoke("rf-create-checkout",{email:document.getElementById("semail").value.trim(),companyName:document.getElementById("scompany").value.trim(),ownerDisplayName:document.getElementById("sowner").value.trim(),plan});
+    if(!o.checkoutUrl)throw new Error("Checkout-Link fehlt.");
+    location.href=o.checkoutUrl;
+  }catch(e){toast(em(e))}}
+}
+async function signupSuccessPage(sessionId){
+  app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Registrierung abschliessen</div></div></div><div class="card" id="signupfinish"><div class="muted">Zahlung wird geprüft…</div></div></div>';
+  let state;
+  try{
+    state=await invoke("rf-onboarding-status",{sessionId});
+  }catch(e){
+    document.getElementById("signupfinish").innerHTML='<div class="notice bad"><strong>Registrierung konnte nicht geprüft werden.</strong><br>'+esc(em(e))+'</div><button id="retrysignup" class="btn" style="width:100%;margin-top:12px">Erneut prüfen</button>';
+    document.getElementById("retrysignup").onclick=()=>signupSuccessPage(sessionId);
+    return;
+  }
+  if(state.status==="pending"){
+    document.getElementById("signupfinish").innerHTML='<div class="notice">Die Zahlung wird noch bestätigt. Das dauert normalerweise nur wenige Sekunden.</div><button id="retrysignup" class="btn primary" style="width:100%;margin-top:12px">Erneut prüfen</button>';
+    document.getElementById("retrysignup").onclick=()=>signupSuccessPage(sessionId);
+    return;
+  }
+  if(state.status==="provisioned"){
+    document.getElementById("signupfinish").innerHTML='<div class="notice ok"><strong>Deine Firma ist bereits aktiviert.</strong></div><button id="gotologin" class="btn primary" style="width:100%;margin-top:12px">Anmelden</button>';
+    document.getElementById("gotologin").onclick=()=>{history.replaceState({},"",APP);login()};
+    return;
+  }
+  const label={starter:"Starter",team:"Team",business:"Business"}[state.plan]||state.plan;
+  document.getElementById("signupfinish").innerHTML='<div class="notice ok"><strong>Zahlung bestätigt.</strong><br>'+esc(state.companyName)+' · '+esc(label)+'</div><div id="existinglogin"></div><div id="newpassword"><div class="field"><label class="label">E-Mail</label><input id="paidemail" class="input" value="'+esc(state.email)+'" disabled></div><div class="field"><label class="label">Passwort festlegen</label><input id="paidpw1" class="input" type="password" autocomplete="new-password" placeholder="mindestens 10 Zeichen"></div><div class="field"><label class="label">Passwort wiederholen</label><input id="paidpw2" class="input" type="password" autocomplete="new-password"></div><button id="finishpaid" class="btn primary" style="width:100%">Firma aktivieren</button></div>';
+  const complete=async(password="")=>{
+    try{
+      const o=await invoke("rf-complete-paid-signup",{intentId:state.intentId,completionToken:state.completionToken,password});
+      if(o.createdUser){
+        const s=await sb.auth.signInWithPassword({email:o.email,password});if(s.error)throw s.error;S.session=s.data.session;
+      }else{
+        S.session=(await sb.auth.getSession()).data.session;
+      }
+      history.replaceState({},"",APP);await context();
+    }catch(e){
+      if(e.code==="LOGIN_REQUIRED"){
+        document.getElementById("newpassword").classList.add("hidden");
+        document.getElementById("existinglogin").innerHTML='<div class="notice">Für diese E-Mail existiert bereits ein RegieFlow-Konto. Melde dich an, um die neue Firma damit zu verknüpfen.</div><div class="field"><label class="label">Passwort</label><input id="existingpaidpw" class="input" type="password" autocomplete="current-password"></div><button id="existingpaidgo" class="btn primary" style="width:100%">Anmelden & Firma aktivieren</button>';
+        document.getElementById("existingpaidgo").onclick=async()=>{try{const p=document.getElementById("existingpaidpw").value;const s=await sb.auth.signInWithPassword({email:state.email,password:p});if(s.error)throw s.error;S.session=s.data.session;await complete("")}catch(x){toast(em(x))}};
+      }else toast(em(e));
+    }
+  };
+  document.getElementById("finishpaid").onclick=async()=>{const p1=document.getElementById("paidpw1").value,p2=document.getElementById("paidpw2").value;if(p1.length<10)return toast("Passwort muss mindestens 10 Zeichen lang sein.");if(p1!==p2)return toast("Die Passwörter stimmen nicht überein.");await complete(p1)};
 }
 function recoveryPage(){
   app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Passwort zurücksetzen</div></div></div><div class="card"><h2>Neues Passwort</h2><div class="field"><label class="label">Neues Passwort</label><input id="rp1" class="input" type="password" autocomplete="new-password" placeholder="mindestens 10 Zeichen"></div><div class="field"><label class="label">Wiederholen</label><input id="rp2" class="input" type="password" autocomplete="new-password"></div><button id="rpg" class="btn primary" style="width:100%">Passwort speichern</button></div></div>';
