@@ -152,10 +152,30 @@ async function context(){
   if((S.ctx.internal||[]).length){S.kind="internal";S.companyId=S.ctx.internal[0].companyId}
   else if((S.ctx.customer||[]).length){S.kind="customer";S.companyId=S.ctx.customer[0].companyId}
   else{app.innerHTML='<div class="auth"><div class="card"><h2>Kein RegieFlow-Zugang</h2><p class="muted">Das Konto ist noch keiner Firma oder Kundenbeziehung zugeordnet.</p><button id="lo" class="btn">Abmelden</button></div></div>';document.getElementById("lo").onclick=logout;return}
+  if(S.kind==="internal"){
+    const access=(S.ctx.internal||[]).find(x=>x.companyId===S.companyId);
+    if(access&&access.mustChangePassword){
+      return forcePasswordChange();
+    }
+  }
   const r=await sb.from("rf_companies").select("*").eq("id",S.companyId).single();if(r.error)throw r.error;S.company=r.data;
   document.documentElement.style.setProperty("--accent",S.company.accent_color||"#111827");
   S.logoUrl=null;if(S.company.logo_path){try{S.logoUrl=await signed(S.company.logo_path,"rf-branding")}catch{}}
   await realtime();S.tab="home";renderShell();await renderTab()
+}
+async function forcePasswordChange(){
+  app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Sicherheitsprüfung</div></div></div><div class="card"><h2>Neues Passwort festlegen</h2><p class="muted">Du meldest dich mit einem temporären Passwort an. Lege jetzt dein persönliches Passwort fest.</p><div class="field"><label class="label">Neues Passwort</label><input id="npw1" class="input" type="password" autocomplete="new-password" placeholder="mindestens 10 Zeichen"></div><div class="field"><label class="label">Passwort wiederholen</label><input id="npw2" class="input" type="password" autocomplete="new-password"></div><button id="npwgo" class="btn primary" style="width:100%">Passwort speichern</button></div></div>';
+  document.getElementById("npwgo").onclick=async()=>{
+    const p1=document.getElementById("npw1").value,p2=document.getElementById("npw2").value;
+    if(p1.length<10)return toast("Passwort muss mindestens 10 Zeichen lang sein.");
+    if(p1!==p2)return toast("Die Passwörter stimmen nicht überein.");
+    try{
+      const u=await sb.auth.updateUser({password:p1});if(u.error)throw u.error;
+      await rpc("rf_ack_password_changed",{p_company_id:S.companyId});
+      toast("Passwort geändert.");
+      await context();
+    }catch(e){toast(em(e))}
+  };
 }
 async function realtime(){
   if(S.channel)await sb.removeChannel(S.channel);
