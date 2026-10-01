@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://khgjhuvfddhpkhgbgwhg.supabase.co; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'">
 <title>FIDRO Lead Automation</title>
 <style>
 :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#151515;background:#f4f5f7}*{box-sizing:border-box}body{margin:0}
@@ -19,7 +19,7 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 </style></head>
 <body>
 <header><div><b>FIDRO Lead Automation</b><div class="muted" style="color:#bbb">V1 · Testphase</div></div>
-<div class="row"><input id="token" type="password" placeholder="Zugriffsschlüssel"><button class="secondary" onclick="saveToken()">Speichern</button><button class="secondary" onclick="rotateOperatorKey()">Schlüssel rotieren</button><span id="pauseBadge" class="badge">-</span></div></header>
+<div class="row"><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Zugriffsschlüssel"><button class="secondary" onclick="saveToken()">Speichern</button><button class="secondary" onclick="rotateOperatorKey()">Schlüssel rotieren</button><button class="secondary" onclick="clearToken()">Abmelden</button><span id="pauseBadge" class="badge">-</span></div></header>
 <main>
 <div class="nav">
 <button onclick="showTab('dash')">Dashboard</button><button onclick="showTab('import')">Import</button><button onclick="showTab('leads')">Leads</button><button onclick="showTab('drafts')">Mail-Entwürfe</button><button onclick="showTab('audit')">Audit</button>
@@ -58,6 +58,7 @@ var SUPA="https://khgjhuvfddhpkhgbgwhg.supabase.co/functions/v1", API=SUPA+"/fid
 document.getElementById("token").value=localStorage.getItem("fidro_token")||"";
 function tok(){return localStorage.getItem("fidro_token")||document.getElementById("token").value.trim()}
 function saveToken(){localStorage.setItem("fidro_token",document.getElementById("token").value.trim());toast("Gespeichert");refreshAll()}
+function clearToken(){localStorage.removeItem("fidro_token");document.getElementById("token").value="";DASH=null;READY=null;LEADS=[];document.getElementById("pauseBadge").textContent="-";toast("Abgemeldet")}
 async function rotateOperatorKey(){if(!tok())return toast("Zuerst aktuellen Zugriffsschlüssel eingeben");if(!confirm("Zugriffsschlüssel jetzt sicher rotieren? Der bisherige Schlüssel wird sofort ungültig."))return;try{var bytes=new Uint8Array(32);crypto.getRandomValues(bytes);var next=Array.from(bytes).map(function(b){return b.toString(16).padStart(2,"0")}).join("");var digestBytes=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(next)));var digest=Array.from(digestBytes).map(function(b){return b.toString(16).padStart(2,"0")}).join("");await call("/rotate-operator-key",{method:"POST",body:JSON.stringify({new_digest:digest})});localStorage.setItem("fidro_token",next);document.getElementById("token").value=next;try{await navigator.clipboard.writeText(next);toast("Schlüssel rotiert und in die Zwischenablage kopiert")}catch(_){toast("Schlüssel rotiert und in diesem Browser gespeichert")};await refreshAll()}catch(e){toast(e.message)}}
 function toast(m){var t=document.getElementById("toast");t.textContent=m;t.style.display="block";setTimeout(function(){t.style.display="none"},3200)}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
