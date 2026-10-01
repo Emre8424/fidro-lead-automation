@@ -125,19 +125,21 @@ async function init(){
   }
   if(!S.session)return login();
   await context();
+  await openDeepLink();
+}
+async function openDeepLink(){
   const deepRegie=q("regie");
-  if(deepRegie){
-    history.replaceState({},"",APP);
-    if(S.kind==="internal"){
-      S.tab="regies";renderShell();await renderTab();await openRegie(deepRegie);
-    }else{
-      S.tab="home";renderShell();await renderTab();await customerRegie(deepRegie);
-    }
+  if(!deepRegie)return;
+  history.replaceState({},"",APP);
+  if(S.kind==="internal"){
+    S.tab="regies";renderShell();await renderTab();await openRegie(deepRegie);
+  }else{
+    S.tab="home";renderShell();await renderTab();await customerRegie(deepRegie);
   }
 }
 function login(msg){
   app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Regie im Griff.</div></div></div><div class="card"><h2>Anmelden</h2>'+(msg?'<div class="notice">'+esc(msg)+'</div>':"")+'<div class="field"><label class="label">E-Mail</label><input id="email" class="input" type="email"></div><div class="field"><label class="label">Passwort</label><input id="pass" class="input" type="password"></div><button id="go" class="btn primary" style="width:100%">Anmelden</button><button id="forgot" class="btn" style="width:100%;margin-top:8px">Passwort vergessen?</button></div></div>';
-  document.getElementById("go").onclick=async()=>{try{const r=await sb.auth.signInWithPassword({email:document.getElementById("email").value.trim(),password:document.getElementById("pass").value});if(r.error)throw r.error;S.session=r.data.session;await context()}catch(e){toast(em(e))}};
+  document.getElementById("go").onclick=async()=>{try{const r=await sb.auth.signInWithPassword({email:document.getElementById("email").value.trim(),password:document.getElementById("pass").value});if(r.error)throw r.error;S.session=r.data.session;await context();await openDeepLink()}catch(e){toast(em(e))}};
   document.getElementById("forgot").onclick=async()=>{const email=document.getElementById("email").value.trim();if(!email)return toast("Bitte zuerst deine E-Mail eingeben.");try{const r=await sb.auth.resetPasswordForEmail(email,{redirectTo:APP+"?recovery=1"});if(r.error)throw r.error;toast("Passwort-Link wurde gesendet.")}catch(e){toast(em(e))}}
 }
 function recoveryPage(){
