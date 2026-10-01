@@ -62,7 +62,7 @@ function em(e){
   };
   return map[m]||m||"Fehler";
 }
-function has(p){const x=(S.ctx&&S.ctx.internal||[]).find(z=>z.companyId===S.companyId);if(!x)return false;const readOnlyAllowed=["projects.view","regies.view","documents.view","documents.export","company.manage","billing.manage"];if(x.writeEnabled===false&&!readOnlyAllowed.includes(p))return false;if(x.isPrimaryOwner)return true;if(Object.prototype.hasOwnProperty.call(x.permissionOverrides||{},p))return !!x.permissionOverrides[p];return (x.rolePermissions||[]).includes(p)}
+function has(p){const x=(S.ctx&&S.ctx.internal||[]).find(z=>z.companyId===S.companyId);if(!x)return false;const readOnlyAllowed=["projects.view","regies.view","documents.view","company.manage","billing.manage"];if(x.writeEnabled===false&&!readOnlyAllowed.includes(p))return false;if(x.isPrimaryOwner)return true;if(Object.prototype.hasOwnProperty.call(x.permissionOverrides||{},p))return !!x.permissionOverrides[p];return (x.rolePermissions||[]).includes(p)}
 function internalArea(){
   return ["company.manage","users.manage","roles.manage","projects.manage","regies.review","documents.view","billing.manage"].some(has)?"Büro":"Monteur";
 }
