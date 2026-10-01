@@ -132,6 +132,18 @@ async function setupPage(token){
 }
 async function invitePage(token){
   const ss=await sb.auth.getSession(),session=ss.data.session;
+  let internal=false;
+  if(session){
+    try{
+      const cx=await rpc("rf_my_context");
+      internal=(cx.internal||[]).length>0;
+    }catch{}
+  }
+  if(session&&internal){
+    app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Kostenloses Kundenkonto</div></div></div><div class="card"><h2>Einladung annehmen</h2><div class="notice warn"><strong>Du bist gerade als Mitarbeiter angemeldet.</strong><br>Damit Kunden- und Mitarbeiterzugang nicht versehentlich vermischt werden, melde dich zuerst ab und öffne den Einladungslink danach erneut.</div><button id="inviteLogout" class="btn primary" style="width:100%;margin-top:12px">Abmelden</button></div></div>';
+    document.getElementById("inviteLogout").onclick=async()=>{await sb.auth.signOut();location.href=location.href};
+    return;
+  }
   app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Kostenloses Kundenkonto</div></div></div><div class="card"><h2>Einladung annehmen</h2><p class="muted">Kundenkonten sind kostenlos. Du kannst Aufträge erstellen, Regien freigeben und dein Archiv jederzeit öffnen.</p>'+(session?'<div class="notice">Du bist bereits angemeldet.</div><button id="claim" class="btn primary" style="width:100%;margin-top:12px">Mit diesem Konto verknüpfen</button>':'<div class="field"><input id="ie" class="input" type="email" placeholder="E-Mail"></div><div class="field"><input id="ip" class="input" type="password" placeholder="Passwort, mind. 10 Zeichen"></div><button id="newacc" class="btn primary" style="width:100%">Kostenloses Konto erstellen</button><hr style="border:0;border-top:1px solid var(--line);margin:20px 0"><div class="field"><input id="ee" class="input" type="email" placeholder="Bestehende E-Mail"></div><div class="field"><input id="ep" class="input" type="password" placeholder="Passwort"></div><button id="existing" class="btn" style="width:100%">Anmelden & verknüpfen</button>')+'</div></div>';
   if(session)document.getElementById("claim").onclick=async()=>{try{await invoke("rf-claim-customer-invite",{token:token});S.session=session;history.replaceState({},"",APP);await context()}catch(e){toast(em(e))}};
   else{
