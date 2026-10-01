@@ -270,12 +270,22 @@ Deno.serve(async (req: Request) => {
 
     if (req.method === "GET" || body.action === "view") {
       if (!ctx.link.first_viewed_at) {
-        const ipRaw = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip");
-        await admin.from("rf_public_approval_links").update({
+        const ipRaw = req.headers.get("cf-connecting-ip") || req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || req.headers.get("x-real-ip");
+        const {data:viewed}=await admin.from("rf_public_approval_links").update({
           first_viewed_at: new Date().toISOString(),
           first_view_ip: ipRaw ? ipRaw.split(",")[0].trim() : null,
           first_view_user_agent: req.headers.get("user-agent")
-        }).eq("id", ctx.link.id).is("first_viewed_at", null);
+        }).eq("id", ctx.link.id).is("first_viewed_at", null).select("id").maybeSingle();
+        if(viewed){
+          await admin.from("rf_audit_log").insert({
+            company_id:ctx.regie.company_id,
+            project_id:ctx.regie.project_id,
+            regie_id:ctx.regie.id,
+            actor_customer_contact_id:ctx.contact.id,
+            event_type:"public_approval_link_viewed",
+            metadata:{version_id:ctx.version.id,version_no:ctx.version.version_no,auth_method:"secure_link"}
+          });
+        }
       }
       const media = await signedUrls(admin, ctx);
       return json({
@@ -322,7 +332,7 @@ Deno.serve(async (req: Request) => {
         p_document_sha256: null,
         p_document_byte_size: null,
         p_auth_method: "secure_link",
-        p_ip_address: req.headers.get("x-forwarded-for"),
+        p_ip_address: req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
         p_user_agent: req.headers.get("user-agent"),
         p_consent_text: null,
         p_consent_version: null,
@@ -370,7 +380,7 @@ Deno.serve(async (req: Request) => {
         p_document_sha256: pdfHash,
         p_document_byte_size: pdfBytes.length,
         p_auth_method: "secure_link",
-        p_ip_address: req.headers.get("x-forwarded-for"),
+        p_ip_address: req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
         p_user_agent: req.headers.get("user-agent"),
         p_consent_text: CONSENT_TEXT,
         p_consent_version: CONSENT_VERSION,
