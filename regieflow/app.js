@@ -503,10 +503,45 @@ function editCustomerContact(x,pid){
   }catch(e){toast(em(e))}}
 }
 function share(title,link){showModal('<div class="between"><h3>'+esc(title)+'</h3><button id="x" class="btn">✕</button></div><p class="muted">Link kopieren und über deinen gewünschten Kanal senden.</p><div class="code">'+esc(link)+'</div><button id="copy" class="btn primary" style="margin-top:12px">Link kopieren</button>');document.getElementById("x").onclick=closeModal;document.getElementById("copy").onclick=async()=>{await navigator.clipboard.writeText(link);toast("Link kopiert")}}
+async function regieCreators(){
+  const [mr,rr]=await Promise.all([
+    sb.from("rf_memberships").select("id,user_id,display_name,role_id,permission_overrides,active").eq("company_id",S.companyId).eq("active",true).order("display_name"),
+    sb.from("rf_roles").select("id,permissions").eq("company_id",S.companyId)
+  ]);
+  if(mr.error)throw mr.error;if(rr.error)throw rr.error;
+  const roles=new Map((rr.data||[]).map(x=>[x.id,x.permissions||[]]));
+  return (mr.data||[]).filter(m=>{
+    if(m.user_id===S.company.primary_owner_user_id)return true;
+    if(Object.prototype.hasOwnProperty.call(m.permission_overrides||{},"regies.create"))return !!m.permission_overrides["regies.create"];
+    return (roles.get(m.role_id)||[]).includes("regies.create");
+  });
+}
 async function newRegie(c){
-  const p=await sb.from("rf_projects").select("id,project_number,name").eq("company_id",S.companyId).eq("active",true).order("project_number");if(p.error)throw p.error;
-  c.innerHTML='<div class="card" style="max-width:720px;margin:auto"><h3>Neue Regie</h3><div class="field"><label class="label">Projekt *</label><select id="np" class="select">'+(p.data||[]).map(x=>'<option value="'+x.id+'">'+esc(x.project_number)+' · '+esc(x.name)+'</option>').join("")+'</select></div><div class="field"><label class="label">Vorher-Bild(er) *</label><input id="nf" class="input" type="file" accept="image/*" multiple capture="environment"><div class="small muted">Mindestens ein Bild von dem, was verändert werden muss.</div></div><div class="field"><label class="label">Beschreibung *</label><textarea id="nd" class="area"></textarea></div><div class="grid g2"><div class="field"><label class="label">Geschätzter Aufwand *</label><input id="ne" class="input" placeholder="z. B. ca. 1 Stunde"></div><div class="field"><label class="label">Minuten optional</label><input id="nm" class="input" type="number" min="1"></div></div><div class="notice warn">Nur eine unverbindliche Schätzung. Abrechnung nach effektivem Aufwand.</div><button id="ng" class="btn primary" style="width:100%;margin-top:14px">Absenden</button></div>';
-  document.getElementById("ng").onclick=async()=>{const files=Array.from(document.getElementById("nf").files);if(!files.length)return toast("Mindestens ein Vorher-Bild ist Pflicht.");try{const o=await rpc("rf_create_internal_regie",{p_project_id:document.getElementById("np").value,p_description:document.getElementById("nd").value.trim(),p_estimate_label:document.getElementById("ne").value.trim(),p_estimate_minutes:Number(document.getElementById("nm").value)||null,p_assigned_monteur_user_id:null});for(const f of files)await upload({regieId:o.regieId,versionId:o.versionId,kind:"before",folder:"before",file:f});const st=await rpc("rf_submit_regie_version",{p_regie_id:o.regieId,p_version_id:o.versionId});toast("Gesendet: "+sl(st));S.tab="regies";renderShell();await renderTab()}catch(e){toast(em(e))}}
+  const [p,creators]=await Promise.all([
+    sb.from("rf_projects").select("id,project_number,name").eq("company_id",S.companyId).eq("active",true).order("project_number"),
+    regieCreators()
+  ]);
+  if(p.error)throw p.error;
+  if(!(p.data||[]).length){c.innerHTML='<div class="notice warn">Erstelle zuerst ein aktives Projekt.</div>';return}
+  const creatorOptions=(creators||[]).map(x=>'<option value="'+x.user_id+'" '+(x.user_id===S.session.user.id?"selected":"")+'>'+esc(x.display_name)+'</option>').join("");
+  c.innerHTML='<div class="card" style="max-width:720px;margin:auto"><h3>Neue Regie</h3><div class="field"><label class="label">Projekt *</label><select id="np" class="select">'+(p.data||[]).map(x=>'<option value="'+x.id+'">'+esc(x.project_number)+' · '+esc(x.name)+'</option>').join("")+'</select></div>'+(creators.length>1?'<div class="field"><label class="label">Zuständig</label><select id="nmonteur" class="select">'+creatorOptions+'</select></div>':'')+'<div class="field"><label class="label">Vorher-Bild(er) *</label><input id="nf" class="input" type="file" accept="image/*" multiple capture="environment"><div class="small muted">Mindestens ein Bild von dem, was verändert werden muss.</div></div><div class="field"><label class="label">Beschreibung *</label><textarea id="nd" class="area"></textarea></div><div class="grid g2"><div class="field"><label class="label">Geschätzter Aufwand *</label><input id="ne" class="input" placeholder="z. B. ca. 1 Stunde"></div><div class="field"><label class="label">Minuten optional</label><input id="nm" class="input" type="number" min="1"></div></div><div class="notice warn">Nur eine unverbindliche Schätzung. Abrechnung nach effektivem Aufwand.</div><button id="ng" class="btn primary" style="width:100%;margin-top:14px">Absenden</button></div>';
+  document.getElementById("ng").onclick=async()=>{
+    const files=Array.from(document.getElementById("nf").files);
+    if(!files.length)return toast("Mindestens ein Vorher-Bild ist Pflicht.");
+    const assignee=document.getElementById("nmonteur")?.value||creators[0]?.user_id||S.session.user.id;
+    try{
+      const o=await rpc("rf_create_internal_regie",{
+        p_project_id:document.getElementById("np").value,
+        p_description:document.getElementById("nd").value.trim(),
+        p_estimate_label:document.getElementById("ne").value.trim(),
+        p_estimate_minutes:Number(document.getElementById("nm").value)||null,
+        p_assigned_monteur_user_id:assignee
+      });
+      for(const file of files)await upload({regieId:o.regieId,versionId:o.versionId,kind:"before",folder:"before",file});
+      const st=await rpc("rf_submit_regie_version",{p_regie_id:o.regieId,p_version_id:o.versionId});
+      toast("Gesendet: "+sl(st));S.tab="regies";renderShell();await renderTab();
+    }catch(e){toast(em(e))}
+  }
 }
 async function regies(c){
   const rows=await getRegies();
@@ -584,18 +619,8 @@ async function approvalLink(r){
 }
 async function acceptCustomerRequestDialog(r){
   try{
-    const [mr,rr]=await Promise.all([
-      sb.from("rf_memberships").select("id,user_id,display_name,role_id,permission_overrides,active").eq("company_id",S.companyId).eq("active",true).order("display_name"),
-      sb.from("rf_roles").select("id,permissions").eq("company_id",S.companyId)
-    ]);
-    if(mr.error)throw mr.error;if(rr.error)throw rr.error;
-    const roles=new Map((rr.data||[]).map(x=>[x.id,x.permissions||[]]));
-    let candidates=(mr.data||[]).filter(m=>{
-      if(m.user_id===S.company.primary_owner_user_id)return true;
-      if(Object.prototype.hasOwnProperty.call(m.permission_overrides||{},"regies.create"))return !!m.permission_overrides["regies.create"];
-      return (roles.get(m.role_id)||[]).includes("regies.create");
-    });
-    if(!candidates.length)candidates=(mr.data||[]);
+    const candidates=await regieCreators();
+    if(!candidates.length)return toast("Keine Person mit Berechtigung zum Erstellen von Regien verfügbar.");
     showModal('<div class="between"><h3>Kundenanfrage übernehmen</h3><button id="x" class="btn">✕</button></div><p class="muted">Wähle, wer die Regie vorbereitet und ausführt.</p><div class="field"><label class="label">Zuständig</label><select id="reqassignee" class="select">'+candidates.map(m=>'<option value="'+m.user_id+'" '+(m.user_id===S.session.user.id?"selected":"")+'>'+esc(m.display_name)+'</option>').join("")+'</select></div><button id="reqaccept" class="btn primary" style="width:100%">Anfrage übernehmen</button>');
     document.getElementById("x").onclick=closeModal;
     document.getElementById("reqaccept").onclick=async()=>{try{
