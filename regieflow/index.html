@@ -315,7 +315,7 @@ async function notifications(c){
   c.innerHTML='<div class="card"><div class="between"><div><h3 style="margin:0">Mitteilungen</h3><div class="small muted">Klick auf eine Mitteilung, um direkt zur Regie zu springen.</div></div><button id="read" class="btn">Alle gelesen</button></div><div class="notif-list">'+(rows.length?rows.map(n=>{const title=nh(n.title),body=nh(n.body||""),showBody=body&&!body.startsWith("Status:")&&!body.startsWith("Der Status wurde");return '<button class="notif-item '+(n.read_at?"":"unread")+'" data-nid="'+n.id+'" data-nregie="'+(n.regie_id||"")+'"><div class="notif-row"><div><div class="notif-title"><strong>'+esc(title)+'</strong></div>'+(showBody?'<div class="small muted" style="margin-top:3px">'+esc(body)+'</div>':"")+'<div class="tiny muted" style="margin-top:4px">'+fmt(n.created_at)+'</div></div>'+(n.regie_id?'<span class="notif-arrow">›</span>':"")+'</div></button>'}).join(""):'<div class="empty">Keine Mitteilungen.</div>')+'</div>';
   document.querySelectorAll("[data-nid]").forEach(el=>el.onclick=async()=>{
     const nid=el.dataset.nid,rid=el.dataset.nregie;
-    if(!el.classList.contains("read")){
+    if(el.classList.contains("unread")){
       await sb.from("rf_notifications").update({read_at:new Date().toISOString()}).eq("id",nid);
       if(S.unread>0)S.unread--;
     }
