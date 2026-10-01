@@ -1,0 +1,4 @@
+self.addEventListener("install",()=>self.skipWaiting());
+self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));
+self.addEventListener("push",e=>{let d={title:"RegieFlow",body:"Neue Aktivität",data:{}};try{d=e.data.json()}catch{}e.waitUntil(self.registration.showNotification(d.title||"RegieFlow",{body:d.body||"",data:d.data||{},badge:null}))});
+self.addEventListener("notificationclick",e=>{e.notification.close();const u=e.notification.data&&e.notification.data.url?e.notification.data.url:"https://raw.githack.com/Emre8424/fidro-lead-automation/regieflow-web-preview/regieflow/index.html";e.waitUntil(clients.matchAll({type:"window",includeUncontrolled:true}).then(xs=>{for(const c of xs){if("focus"in c){c.navigate(u);return c.focus()}}return clients.openWindow(u)}))});
