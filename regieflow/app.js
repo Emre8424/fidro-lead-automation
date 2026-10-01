@@ -268,15 +268,15 @@ function editProject(p){
   showModal('<div class="between"><h3>Projekt bearbeiten</h3><button id="x" class="btn">✕</button></div><div class="field"><label class="label">Projektnummer *</label><input id="ep1" class="input" value="'+esc(p.project_number)+'"></div><div class="field"><label class="label">Projektname *</label><input id="ep3" class="input" value="'+esc(p.name)+'"></div><div class="field"><label class="label">Adresse</label><input id="ep4" class="input" value="'+esc(p.address||"")+'"></div><div class="field"><label class="label">Bauherr / Kunde</label><input id="ep5" class="input" value="'+esc(p.client_name||"")+'"></div><div class="field"><label class="label">Freigabeablauf</label><select id="ep6" class="select"><option value="office_then_customer" '+(p.approval_workflow==="office_then_customer"?"selected":"")+'>Mit Büroprüfung – Büro prüft zuerst</option><option value="parallel_office_customer" '+(p.approval_workflow==="parallel_office_customer"?"selected":"")+'>Direkt zum Kunden – Büro wird informiert</option></select></div><label class="small" style="display:flex;gap:8px;align-items:center;margin:12px 0"><input id="epa" type="checkbox" '+(p.active?"checked":"")+'> Projekt aktiv</label><button id="eps" class="btn primary" style="width:100%">Speichern</button>');
   document.getElementById("x").onclick=closeModal;
   document.getElementById("eps").onclick=async()=>{try{
-    const z=await sb.from("rf_projects").update({
-      project_number:document.getElementById("ep1").value.trim(),
-      name:document.getElementById("ep3").value.trim(),
-      address:document.getElementById("ep4").value.trim()||null,
-      client_name:document.getElementById("ep5").value.trim()||null,
-      approval_workflow:document.getElementById("ep6").value,
-      active:document.getElementById("epa").checked
-    }).eq("id",p.id);
-    if(z.error)throw z.error;
+    await rpc("rf_update_project",{
+      p_project_id:p.id,
+      p_project_number:document.getElementById("ep1").value.trim(),
+      p_name:document.getElementById("ep3").value.trim(),
+      p_address:document.getElementById("ep4").value.trim()||null,
+      p_client_name:document.getElementById("ep5").value.trim()||null,
+      p_approval_workflow:document.getElementById("ep6").value,
+      p_active:document.getElementById("epa").checked
+    });
     closeModal();toast("Projekt gespeichert");await renderTab();
   }catch(e){toast(em(e))}}
 }
