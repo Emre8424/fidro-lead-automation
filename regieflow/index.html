@@ -51,6 +51,9 @@ function em(e){
   try{return JSON.stringify(e)}catch{return String(e)}
 }
 function has(p){const x=(S.ctx&&S.ctx.internal||[]).find(z=>z.companyId===S.companyId);if(!x)return false;if(x.isPrimaryOwner)return true;if(Object.prototype.hasOwnProperty.call(x.permissionOverrides||{},p))return !!x.permissionOverrides[p];return (x.rolePermissions||[]).includes(p)}
+function internalArea(){
+  return ["company.manage","users.manage","roles.manage","projects.manage","regies.review","documents.view","billing.manage"].some(has)?"Büro":"Monteur";
+}
 function closeModal(){modal.innerHTML=""}
 function showModal(h){modal.innerHTML='<div class="modalbg" id="mbg"><div class="modal">'+h+'</div></div>';document.getElementById("mbg").onclick=e=>{if(e.target.id==="mbg")closeModal()}}
 async function rpc(name,args){const r=await sb.rpc(name,args||{});if(r.error)throw r.error;return r.data}
@@ -185,15 +188,19 @@ async function realtime(){
 async function logout(){await sb.auth.signOut();if(S.channel)await sb.removeChannel(S.channel);Object.assign(S,{session:null,ctx:null,kind:null,companyId:null,company:null,tab:"home",channel:null,unread:0});login()}
 function nav(){
   if(S.kind==="customer")return [["home","Übersicht"],["request","Auftrag"],["archive","Archiv"],["notifications","Mitteilungen"]];
-  const x=[["home","Übersicht"],["projects","Projekte"],["regies","Regien"],["new","Neue Regie"]];
+  const x=[["home","Übersicht"]];
+  if(has("projects.view")||has("projects.manage"))x.push(["projects","Projekte"]);
+  if(has("regies.view")||has("regies.create")||has("regies.review")||has("regies.complete")||has("regies.close"))x.push(["regies","Regien"]);
+  if(has("regies.create"))x.push(["new","Neue Regie"]);
   if(has("users.manage")||has("roles.manage"))x.push(["team","Benutzer & Rechte"]);
   if(has("company.manage")||has("billing.manage"))x.push(["settings","Einstellungen"]);
-  x.push(["notifications","Mitteilungen"]);return x
+  x.push(["notifications","Mitteilungen"]);
+  return x;
 }
 function mark(){return S.logoUrl?'<img src="'+esc(S.logoUrl)+'">':"RF"}
 function renderShell(){
   const items=nav();
-  app.innerHTML='<div class="shell"><aside class="side"><div class="brand"><div class="mark">'+mark()+'</div><div><strong>'+esc(S.company.name)+'</strong><div class="small muted">RegieFlow</div></div></div><div class="nav">'+items.map(x=>'<button data-tab="'+x[0]+'" class="'+(S.tab===x[0]?"active":"")+'">'+esc(x[1])+(x[0]==="notifications"&&S.unread?' <span class="badge">'+S.unread+'</span>':"")+'</button>').join("")+'</div><div style="position:absolute;left:14px;right:14px;bottom:18px"><button id="push" class="btn" style="width:100%;margin-bottom:7px">'+(pushEnabled()?"Push aktiviert":"Push aktivieren")+'</button><button id="logout" class="btn" style="width:100%">Abmelden</button></div></aside><main class="main"><header class="top"><strong>'+esc((items.find(x=>x[0]===S.tab)||["","RegieFlow"])[1])+'</strong><div class="row"><button id="pushTop" class="btn">'+(pushEnabled()?"🔔":"Push")+'</button><button id="logoutTop" class="btn">Abmelden</button></div></header><div id="content" class="content"></div></main></div><div class="mobilebar">'+items.slice(0,5).map(x=>'<button data-tab="'+x[0]+'">'+esc(x[1])+'</button>').join("")+'</div>';
+  app.innerHTML='<div class="shell"><aside class="side"><div class="brand"><div class="mark">'+mark()+'</div><div><strong>'+esc(S.company.name)+'</strong><div class="small muted">RegieFlow</div></div></div><div class="nav">'+items.map(x=>'<button data-tab="'+x[0]+'" class="'+(S.tab===x[0]?"active":"")+'">'+esc(x[1])+(x[0]==="notifications"&&S.unread?' <span class="badge">'+S.unread+'</span>':"")+'</button>').join("")+'</div><div style="position:absolute;left:14px;right:14px;bottom:18px"><button id="push" class="btn" style="width:100%;margin-bottom:7px">'+(pushEnabled()?"Push aktiviert":"Push aktivieren")+'</button><button id="logout" class="btn" style="width:100%">Abmelden</button></div></aside><main class="main"><header class="top"><strong>'+esc((items.find(x=>x[0]===S.tab)||["","RegieFlow"])[1])+'</strong><div class="row"><span class="small muted">'+esc(S.kind==="customer"?"Kunde":internalArea())+'</span><button id="pushTop" class="btn">'+(pushEnabled()?"🔔":"Push")+'</button><button id="logoutTop" class="btn">Abmelden</button></div></header><div id="content" class="content"></div></main></div><div class="mobilebar">'+items.slice(0,5).map(x=>'<button data-tab="'+x[0]+'">'+esc(x[1])+'</button>').join("")+'</div>';
   document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=async()=>{S.tab=b.dataset.tab;renderShell();await renderTab()});
   document.getElementById("logout").onclick=logout;document.getElementById("logoutTop").onclick=logout;document.getElementById("push").onclick=enablePush;document.getElementById("pushTop").onclick=enablePush
 }
@@ -209,8 +216,8 @@ function regieTable(rows){if(!rows.length)return'<div class="empty">Noch keine R
 function bindRows(){document.querySelectorAll("[data-r]").forEach(x=>x.onclick=()=>openRegie(x.dataset.r))}
 async function internalHome(c){
   const rows=await getRegies(),pr=await sb.from("rf_projects").select("id",{count:"exact",head:true}).eq("company_id",S.companyId).eq("active",true);
-  c.innerHTML='<div class="hero"><h2 style="margin:0 0 6px">Regie im Griff.</h2><div style="opacity:.8">Zusatzarbeiten sauber dokumentieren, freigeben und abschliessen.</div></div><div class="grid g4" style="margin-top:14px"><div class="card"><div class="small muted">Aktive Projekte</div><div class="metric">'+(pr.count||0)+'</div></div><div class="card"><div class="small muted">Warten</div><div class="metric">'+rows.filter(r=>["internal_review","awaiting_customer"].includes(r.status)).length+'</div></div><div class="card"><div class="small muted">Freigegeben</div><div class="metric">'+rows.filter(r=>["approved","in_execution","awaiting_rapport"].includes(r.status)).length+'</div></div><div class="card"><div class="small muted">Abgeschlossen</div><div class="metric">'+rows.filter(r=>r.status==="closed").length+'</div></div></div><div class="card" style="margin-top:14px"><div class="between"><h3>Letzte Regien</h3><button id="hn" class="btn primary">+ Neue Regie</button></div>'+regieTable(rows.slice(0,8))+'</div>';
-  document.getElementById("hn").onclick=async()=>{S.tab="new";renderShell();await renderTab()};bindRows()
+  c.innerHTML='<div class="hero"><h2 style="margin:0 0 6px">Regie im Griff.</h2><div style="opacity:.8">Zusatzarbeiten sauber dokumentieren, freigeben und abschliessen.</div></div><div class="grid g4" style="margin-top:14px"><div class="card"><div class="small muted">Aktive Projekte</div><div class="metric">'+(pr.count||0)+'</div></div><div class="card"><div class="small muted">Warten</div><div class="metric">'+rows.filter(r=>["internal_review","awaiting_customer"].includes(r.status)).length+'</div></div><div class="card"><div class="small muted">Freigegeben</div><div class="metric">'+rows.filter(r=>["approved","in_execution","awaiting_rapport"].includes(r.status)).length+'</div></div><div class="card"><div class="small muted">Abgeschlossen</div><div class="metric">'+rows.filter(r=>r.status==="closed").length+'</div></div></div><div class="card" style="margin-top:14px"><div class="between"><h3>Letzte Regien</h3>'+(has("regies.create")?'<button id="hn" class="btn primary">+ Neue Regie</button>':"")+'</div>'+regieTable(rows.slice(0,8))+'</div>';
+  if(document.getElementById("hn"))document.getElementById("hn").onclick=async()=>{S.tab="new";renderShell();await renderTab()};bindRows()
 }
 async function projects(c){
   const r=await sb.from("rf_projects").select("*").eq("company_id",S.companyId).order("created_at",{ascending:false});if(r.error)throw r.error;
