@@ -40,6 +40,7 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;"
 const q=k=>new URL(location.href).searchParams.get(k);
 const fmt=d=>d?new Intl.DateTimeFormat("de-CH",{dateStyle:"short",timeStyle:"short"}).format(new Date(d)):"—";
 const sl=s=>({draft:"Entwurf",customer_request:"Kundenanfrage",submitted:"Gesendet",internal_review:"Büroprüfung",awaiting_customer:"Wartet auf Kunde",approved:"Freigegeben",rejected:"Abgelehnt",in_execution:"In Ausführung",work_completed:"Arbeit erledigt",awaiting_rapport:"Rapport-Nr. fehlt",closed:"Abgeschlossen"})[s]||s;
+const nh=s=>{let x=String(s||"");for(const k of ["draft","customer_request","submitted","internal_review","awaiting_customer","approved","rejected","in_execution","work_completed","awaiting_rapport","closed"])x=x.split(k).join(sl(k));return x};
 function toast(m){toastBox.innerHTML='<div class="toast">'+esc(m)+'</div>';setTimeout(()=>toastBox.innerHTML="",3300)}
 function em(e){
   if(!e)return "Fehler";
