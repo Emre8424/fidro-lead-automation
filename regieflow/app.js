@@ -201,7 +201,7 @@ function signupPage(cancelled=false){
   document.getElementById("startcheckout").onclick=async()=>{try{
     if(!document.getElementById("legalagree").checked)return toast("Bitte AGB und Datenschutzerklärung bestätigen.");
     const plan=document.querySelector('input[name="signupplan"]:checked')?.value;
-    const o=await invoke("rf-create-checkout",{email:document.getElementById("semail").value.trim(),companyName:document.getElementById("scompany").value.trim(),ownerDisplayName:document.getElementById("sowner").value.trim(),plan});
+    const o=await invoke("rf-create-checkout",{email:document.getElementById("semail").value.trim(),companyName:document.getElementById("scompany").value.trim(),ownerDisplayName:document.getElementById("sowner").value.trim(),plan,legalAccepted:true});
     if(!o.checkoutUrl)throw new Error("Checkout-Link fehlt.");
     location.href=o.checkoutUrl;
   }catch(e){toast(em(e))}}
