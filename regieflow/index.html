@@ -55,33 +55,36 @@ function closeModal(){modal.innerHTML=""}
 function showModal(h){modal.innerHTML='<div class="modalbg" id="mbg"><div class="modal">'+h+'</div></div>';document.getElementById("mbg").onclick=e=>{if(e.target.id==="mbg")closeModal()}}
 async function rpc(name,args){const r=await sb.rpc(name,args||{});if(r.error)throw r.error;return r.data}
 async function invoke(name,body){
-  const r=await sb.functions.invoke(name,{body:body||{}});
-  if(r.error){
-    let m=r.error&&r.error.message?String(r.error.message):"Unbekannter Serverfehler";
-    try{
-      if(r.error.context&&typeof r.error.context.clone==="function"){
-        const clone=r.error.context.clone();
-        try{
-          const j=await clone.json();
-          const raw=j&&Object.prototype.hasOwnProperty.call(j,"error")?j.error:j;
-          if(typeof raw==="string")m=raw;
-          else if(raw&&raw.message)m=String(raw.message);
-          else if(raw)m=JSON.stringify(raw);
-        }catch{
-          try{
-            const t=await r.error.context.text();
-            if(t)m=t;
-          }catch{}
-        }
-      }
-    }catch{}
-    throw new Error(m);
+  const headers={"Content-Type":"application/json","apikey":KEY};
+  const session=(await sb.auth.getSession()).data.session;
+  if(session&&session.access_token)headers["Authorization"]="Bearer "+session.access_token;
+  let res;
+  try{
+    res=await fetch(SUPABASE_URL+"/functions/v1/"+encodeURIComponent(name),{
+      method:"POST",
+      headers,
+      body:JSON.stringify(body||{})
+    });
+  }catch(e){
+    throw new Error("Verbindung zum RegieFlow-Server fehlgeschlagen: "+em(e));
   }
-  if(r.data&&r.data.error){
-    const raw=r.data.error;
-    throw new Error(typeof raw==="string"?raw:(raw&&raw.message?String(raw.message):JSON.stringify(raw)));
+  const raw=await res.text();
+  let data=null;
+  try{data=raw?JSON.parse(raw):null}catch{data=raw}
+  if(!res.ok){
+    let msg="Serverfehler ("+res.status+")";
+    if(typeof data==="string"&&data)msg=data;
+    else if(data&&typeof data.error==="string")msg=data.error;
+    else if(data&&data.error&&data.error.message)msg=String(data.error.message);
+    else if(data&&data.message)msg=String(data.message);
+    else if(data)try{msg=JSON.stringify(data)}catch{}
+    throw new Error(msg);
   }
-  return r.data;
+  if(data&&data.error){
+    const rawErr=data.error;
+    throw new Error(typeof rawErr==="string"?rawErr:(rawErr&&rawErr.message?String(rawErr.message):JSON.stringify(rawErr)));
+  }
+  return data;
 }
 async function signed(path,bucket){const r=await sb.storage.from(bucket||"rf-private").createSignedUrl(path,900);if(r.error)throw r.error;return r.data.signedUrl}
 async function hashFile(f){const h=await crypto.subtle.digest("SHA-256",await f.arrayBuffer());return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,"0")).join("")}
