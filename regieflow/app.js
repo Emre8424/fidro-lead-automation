@@ -55,11 +55,14 @@ function em(e){
     "Version already locked":"Diese Version wurde bereits gesendet und ist gesperrt.",
     "Version is not locked/submitted":"Diese Version wurde noch nicht gesendet.",
     "You cannot change your own role":"Du kannst deine eigene Rolle nicht ändern.",
-    "You cannot deactivate your own account":"Du kannst deinen eigenen Zugang nicht deaktivieren."
+    "You cannot deactivate your own account":"Du kannst deinen eigenen Zugang nicht deaktivieren.",
+    "Company subscription is read-only":"Das Firmenabo ist derzeit nur im Lesemodus.",
+    "Subscription is not active":"Das Firmenabo ist nicht aktiv.",
+    "Extra-seat billing is not configured":"Zusätzliche Profile sind für diesen Tarif noch nicht eingerichtet."
   };
   return map[m]||m||"Fehler";
 }
-function has(p){const x=(S.ctx&&S.ctx.internal||[]).find(z=>z.companyId===S.companyId);if(!x)return false;if(x.isPrimaryOwner)return true;if(Object.prototype.hasOwnProperty.call(x.permissionOverrides||{},p))return !!x.permissionOverrides[p];return (x.rolePermissions||[]).includes(p)}
+function has(p){const x=(S.ctx&&S.ctx.internal||[]).find(z=>z.companyId===S.companyId);if(!x)return false;const readOnlyAllowed=["projects.view","regies.view","documents.view","documents.export","company.manage","billing.manage"];if(x.writeEnabled===false&&!readOnlyAllowed.includes(p))return false;if(x.isPrimaryOwner)return true;if(Object.prototype.hasOwnProperty.call(x.permissionOverrides||{},p))return !!x.permissionOverrides[p];return (x.rolePermissions||[]).includes(p)}
 function internalArea(){
   return ["company.manage","users.manage","roles.manage","projects.manage","regies.review","documents.view","billing.manage"].some(has)?"Büro":"Monteur";
 }
@@ -351,7 +354,7 @@ async function realtime(){
 }
 async function logout(){await sb.auth.signOut();if(S.channel)await sb.removeChannel(S.channel);Object.assign(S,{session:null,ctx:null,kind:null,companyId:null,company:null,tab:"home",channel:null,unread:0});login()}
 function nav(){
-  if(S.kind==="customer")return [["home","Übersicht"],["request","Auftrag"],["archive","Archiv"],["notifications","Mitteilungen"],["account","Konto"]];
+  if(S.kind==="customer"){const x=(S.ctx?.customer||[]).find(z=>z.companyId===S.companyId);const n=[["home","Übersicht"]];if(x?.writeEnabled!==false)n.push(["request","Auftrag"]);n.push(["archive","Archiv"],["notifications","Mitteilungen"],["account","Konto"]);return n}
   const x=[["home","Übersicht"]];
   if(has("projects.view")||has("projects.manage"))x.push(["projects","Projekte"]);
   if(has("regies.view")||has("regies.create")||has("regies.review")||has("regies.complete")||has("regies.close"))x.push(["regies","Regien"]);
@@ -364,12 +367,14 @@ function nav(){
 function mark(){return S.logoUrl?'<img src="'+esc(S.logoUrl)+'">':"RF"}
 function renderShell(){
   const items=nav();
-  app.innerHTML='<div class="shell"><aside class="side"><div class="brand"><div class="mark">'+mark()+'</div><div><strong>'+esc(S.company.name)+'</strong><div class="small muted">RegieFlow</div></div></div><div class="nav">'+items.map(x=>'<button data-tab="'+x[0]+'" class="'+(S.tab===x[0]?"active":"")+'">'+esc(x[1])+(x[0]==="notifications"&&S.unread?' <span class="badge">'+S.unread+'</span>':"")+'</button>').join("")+'</div><div style="position:absolute;left:14px;right:14px;bottom:18px"><button id="push" class="btn" style="width:100%;margin-bottom:7px">'+(pushEnabled()?"Push aktiviert":"Push aktivieren")+'</button><button id="logout" class="btn" style="width:100%">Abmelden</button></div></aside><main class="main"><header class="top"><strong>'+esc((items.find(x=>x[0]===S.tab)||["","RegieFlow"])[1])+'</strong><div class="row"><span class="small muted">'+esc(S.kind==="customer"?"Kunde":internalArea())+'</span><button id="pushTop" class="btn">'+(pushEnabled()?"🔔":"Push")+'</button><button id="logoutTop" class="btn">Abmelden</button></div></header><div id="content" class="content"></div></main></div><div class="mobilebar">'+items.slice(0,5).map(x=>'<button data-tab="'+x[0]+'">'+esc(x[1])+'</button>').join("")+'</div>';
+  const access=S.kind==="internal"?(S.ctx?.internal||[]).find(x=>x.companyId===S.companyId):(S.ctx?.customer||[]).find(x=>x.companyId===S.companyId);
+  const readOnly=access?.writeEnabled===false;
+  app.innerHTML='<div class="shell"><aside class="side"><div class="brand"><div class="mark">'+mark()+'</div><div><strong>'+esc(S.company.name)+'</strong><div class="small muted">RegieFlow</div></div></div><div class="nav">'+items.map(x=>'<button data-tab="'+x[0]+'" class="'+(S.tab===x[0]?"active":"")+'">'+esc(x[1])+(x[0]==="notifications"&&S.unread?' <span class="badge">'+S.unread+'</span>':"")+'</button>').join("")+'</div><div style="position:absolute;left:14px;right:14px;bottom:18px"><button id="push" class="btn" style="width:100%;margin-bottom:7px">'+(pushEnabled()?"Push aktiviert":"Push aktivieren")+'</button><button id="logout" class="btn" style="width:100%">Abmelden</button></div></aside><main class="main"><header class="top"><strong>'+esc((items.find(x=>x[0]===S.tab)||["","RegieFlow"])[1])+'</strong><div class="row"><span class="small muted">'+esc(S.kind==="customer"?"Kunde":internalArea())+'</span><button id="pushTop" class="btn">'+(pushEnabled()?"🔔":"Push")+'</button><button id="logoutTop" class="btn">Abmelden</button></div></header><div id="content" class="content">'+(readOnly?'<div class="notice warn" style="margin-bottom:14px"><strong>Nur-Lesen-Modus</strong><br>Das Firmenabo ist derzeit nicht aktiv. Bestehende Projekte, Regien und Dokumente bleiben verfügbar.</div>':"")+'</div></main></div><div class="mobilebar">'+items.slice(0,5).map(x=>'<button data-tab="'+x[0]+'">'+esc(x[1])+'</button>').join("")+'</div>';
   document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=async()=>{S.tab=b.dataset.tab;renderShell();await renderTab()});
   document.getElementById("logout").onclick=logout;document.getElementById("logoutTop").onclick=logout;document.getElementById("push").onclick=enablePush;document.getElementById("pushTop").onclick=enablePush
 }
 async function renderTab(){
-  const c=document.getElementById("content");if(!c)return;c.innerHTML='<div class="card muted">Laden…</div>';
+  const c=document.getElementById("content");if(!c)return;const access=S.kind==="internal"?(S.ctx?.internal||[]).find(x=>x.companyId===S.companyId):(S.ctx?.customer||[]).find(x=>x.companyId===S.companyId);c.innerHTML=(access?.writeEnabled===false?'<div class="notice warn" style="margin-bottom:14px"><strong>Nur-Lesen-Modus</strong><br>Das Firmenabo ist derzeit nicht aktiv. Bestehende Daten bleiben verfügbar.</div>':"")+'<div class="card muted">Laden…</div>';
   try{
     if(S.kind==="customer"){if(S.tab==="home")return customerHome(c);if(S.tab==="request")return customerRequest(c);if(S.tab==="archive")return customerArchive(c);if(S.tab==="notifications")return notifications(c);if(S.tab==="account")return accountPage(c)}
     else{if(S.tab==="home")return internalHome(c);if(S.tab==="projects")return projects(c);if(S.tab==="regies")return regies(c);if(S.tab==="new")return newRegie(c);if(S.tab==="team")return team(c);if(S.tab==="settings")return settings(c);if(S.tab==="notifications")return notifications(c)}
