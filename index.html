@@ -51,7 +51,7 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 <label>Quelle / Nachweis *</label><input id="consentSource" placeholder="z.B. FIDRO Gewinnspielformular 2026" style="width:100%">
 <label>Zeitpunkt der Einwilligung *</label><input id="consentAt" type="datetime-local" style="width:100%">
 <label>Exakter Einwilligungswortlaut *</label><textarea id="consentWording" style="min-height:130px" placeholder="Exakten Wortlaut aus Formular/Quelle einfügen..."></textarea>
-<p class="muted"><b>Für zukünftige Gewinnspielformulare:</b> „Ich bin einverstanden, dass die FIDRO GmbH mich im Zusammenhang mit dem Gewinnspiel sowie zu Beratungs- und Marketingzwecken per WhatsApp kontaktiert. Ich kann diese Einwilligung jederzeit widerrufen, z.B. mit STOP. Datenschutzerklärung: https://fidro.ch/datenschutz“</p>
+<p class="muted"><b>Für zukünftige Gewinnspielformulare:</b> separate, nicht vorausgewählte WhatsApp-Checkbox verwenden. Empfohlener Wortlaut: „Ich bin einverstanden, dass die FIDRO GmbH mich im Zusammenhang mit dem Gewinnspiel sowie zu Beratungs- und Marketingzwecken per WhatsApp kontaktiert. Ich kann diese Einwilligung jederzeit widerrufen, z.B. mit STOP. Datenschutzerklärung: https://fidro.ch/datenschutz“</p>
 <div class="actions"><button class="good" onclick="saveConsent()">Nachweis speichern</button><button class="secondary" onclick="document.getElementById('consent').close()">Abbrechen</button></div></div></dialog>
 <dialog id="bizAuth"><div class="modal"><h3>FIDRO-Freigabe dokumentieren</h3>
 <p class="muted">Nur erfassen, wenn FIDRO die Nutzung der WhatsApp Cloud API / Meta für diese Lead-Automation tatsächlich freigegeben hat.</p>
