@@ -31,6 +31,8 @@ function em(e){
     "Invalid decision":"Ungültige Auswahl.",
     "At least one before-work photo is required":"Mindestens ein Vorher-Bild ist erforderlich.",
     "Assigned Monteur is not an active internal user":"Der zugewiesene Monteur ist nicht aktiv.",
+    "Assigned Monteur is required":"Bitte eine zuständige Person auswählen.",
+    "Assigned Monteur cannot create Regien":"Die ausgewählte Person darf keine Regien erstellen.",
     "Customer already has an account":"Für diese Kundenperson existiert bereits ein Konto.",
     "Customer is not an active authorized signer for this project":"Diese Kundenperson ist nicht mehr freigabeberechtigt.",
     "Customer is not authorized to sign this project":"Diese Kundenperson darf dieses Projekt nicht freigeben.",
