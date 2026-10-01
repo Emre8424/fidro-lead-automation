@@ -154,8 +154,7 @@ async function enablePush(){
     const perm=await Notification.requestPermission();if(perm!=="granted")throw new Error("Push-Benachrichtigungen wurden nicht erlaubt.");
     const k=await fetch(SUPABASE_URL+"/functions/v1/rf-push?public=1");const j=await k.json();if(!k.ok||!j.publicKey)throw new Error(j.error||"Push-Schlüssel fehlt");
     let sub=await reg.pushManager.getSubscription();if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64key(j.publicKey)});
-    const sj=sub.toJSON(),row={endpoint:sub.endpoint,p256dh:sj.keys.p256dh,auth_key:sj.keys.auth};
-    if(S.kind==="internal")row.user_id=S.session.user.id;else row.customer_contact_id=(S.ctx.customer||[]).find(x=>x.companyId===S.companyId).customerContactId;
+    const sj=sub.toJSON(),row={endpoint:sub.endpoint,p256dh:sj.keys.p256dh,auth_key:sj.keys.auth,user_id:S.session.user.id,customer_contact_id:null};
     const r=await sb.from("rf_push_subscriptions").upsert(row,{onConflict:"endpoint"});if(r.error)throw r.error;toast("Push-Benachrichtigungen aktiviert.");renderShell()
   }catch(e){toast(em(e))}
 }
