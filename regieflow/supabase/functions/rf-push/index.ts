@@ -55,7 +55,7 @@ Deno.serve(async(req:Request)=>{
     const payload=JSON.stringify({
       title:n.title||"RegieFlow",
       body:n.body||"",
-      data:{url:"https://regieflow.pages.dev/",regieId:n.regie_id}
+      data:{url:n.regie_id?`https://regieflow.pages.dev/?regie=${encodeURIComponent(n.regie_id)}`:"https://regieflow.pages.dev/",regieId:n.regie_id}
     });
     let sent=0,removed=0,failed=0;
     for(const s of subs||[]){
