@@ -555,7 +555,7 @@ async function openRegie(id){
   document.getElementById("x").onclick=closeModal;document.querySelectorAll("[data-doc]").forEach(b=>b.onclick=async()=>window.open(await signed(b.dataset.doc),"_blank"));
   bindComment(id,openRegie);
   const click=async(id2,fn)=>{const el=document.getElementById(id2);if(el)el.onclick=fn};
-  click("reqok",async()=>{try{await rpc("rf_decide_customer_request",{p_regie_id:id,p_decision:"approved",p_assigned_monteur_user_id:S.session.user.id});closeModal();toast("Anfrage übernommen");await renderTab()}catch(e){toast(em(e))}});
+  click("reqok",()=>acceptCustomerRequestDialog(r));
   click("reqno",async()=>{try{await rpc("rf_decide_customer_request",{p_regie_id:id,p_decision:"rejected",p_assigned_monteur_user_id:null});closeModal();toast("Abgelehnt");await renderTab()}catch(e){toast(em(e))}});
   click("prepare",()=>prepareCustomerDraft(r));
   click("editDraft",()=>editDraftDialog(r));
@@ -579,6 +579,28 @@ async function approvalLink(r){
   document.getElementById("x").onclick=closeModal;
   document.getElementById("mk").onclick=async()=>{try{const t=await rpc("rf_create_public_approval_link",{p_version_id:r.current_version_id,p_customer_contact_id:document.getElementById("who").value,p_valid_hours:168});share("Freigabelink",APP+"?approve="+encodeURIComponent(t))}catch(e){toast(em(e))}};
   if(document.getElementById("rvlinks"))document.getElementById("rvlinks").onclick=async()=>{try{const n=await rpc("rf_revoke_public_approval_links",{p_version_id:r.current_version_id,p_customer_contact_id:null});closeModal();toast((n||0)+" Link(s) widerrufen.")}catch(e){toast(em(e))}}
+}
+async function acceptCustomerRequestDialog(r){
+  try{
+    const [mr,rr]=await Promise.all([
+      sb.from("rf_memberships").select("id,user_id,display_name,role_id,permission_overrides,active").eq("company_id",S.companyId).eq("active",true).order("display_name"),
+      sb.from("rf_roles").select("id,permissions").eq("company_id",S.companyId)
+    ]);
+    if(mr.error)throw mr.error;if(rr.error)throw rr.error;
+    const roles=new Map((rr.data||[]).map(x=>[x.id,x.permissions||[]]));
+    let candidates=(mr.data||[]).filter(m=>{
+      if(m.user_id===S.company.primary_owner_user_id)return true;
+      if(Object.prototype.hasOwnProperty.call(m.permission_overrides||{},"regies.create"))return !!m.permission_overrides["regies.create"];
+      return (roles.get(m.role_id)||[]).includes("regies.create");
+    });
+    if(!candidates.length)candidates=(mr.data||[]);
+    showModal('<div class="between"><h3>Kundenanfrage übernehmen</h3><button id="x" class="btn">✕</button></div><p class="muted">Wähle, wer die Regie vorbereitet und ausführt.</p><div class="field"><label class="label">Zuständig</label><select id="reqassignee" class="select">'+candidates.map(m=>'<option value="'+m.user_id+'" '+(m.user_id===S.session.user.id?"selected":"")+'>'+esc(m.display_name)+'</option>').join("")+'</select></div><button id="reqaccept" class="btn primary" style="width:100%">Anfrage übernehmen</button>');
+    document.getElementById("x").onclick=closeModal;
+    document.getElementById("reqaccept").onclick=async()=>{try{
+      await rpc("rf_decide_customer_request",{p_regie_id:r.id,p_decision:"approved",p_assigned_monteur_user_id:document.getElementById("reqassignee").value});
+      closeModal();toast("Anfrage übernommen");await renderTab();
+    }catch(e){toast(em(e))}}
+  }catch(e){toast(em(e))}
 }
 function prepareCustomerDraft(r){showModal('<div class="between"><h3>Kundenanfrage vorbereiten</h3><button id="x" class="btn">✕</button></div><p class="muted">Beschreibung prüfen, Aufwand schätzen und danach mindestens ein Vorher-Bild aufnehmen.</p><div class="field"><label class="label">Beschreibung</label><textarea id="pd" class="area">'+esc(r.description||"")+'</textarea></div><div class="field"><label class="label">Geschätzter Aufwand</label><input id="pe" class="input" placeholder="z. B. ca. 1 Stunde"></div><div class="field"><label class="label">Minuten optional</label><input id="pm" class="input" type="number" min="1"></div><button id="pg" class="btn primary" style="width:100%">Version 1 erstellen</button>');document.getElementById("x").onclick=closeModal;document.getElementById("pg").onclick=async()=>{try{await rpc("rf_prepare_customer_request_draft",{p_regie_id:r.id,p_description:document.getElementById("pd").value.trim(),p_estimate_label:document.getElementById("pe").value.trim(),p_estimate_minutes:Number(document.getElementById("pm").value)||null});closeModal();toast("Entwurf vorbereitet");await openRegie(r.id)}catch(e){toast(em(e))}}}
 function editDraftDialog(r){showModal('<div class="between"><h3>Entwurf bearbeiten</h3><button id="x" class="btn">✕</button></div><div class="field"><label class="label">Beschreibung</label><textarea id="ed" class="area">'+esc(r.description||"")+'</textarea></div><div class="field"><label class="label">Geschätzter Aufwand</label><input id="ee2" class="input" value="'+esc(r.estimate_label||"")+'"></div><button id="eg" class="btn primary" style="width:100%">Speichern</button>');document.getElementById("x").onclick=closeModal;document.getElementById("eg").onclick=async()=>{try{const z=await sb.from("rf_regie_versions").update({description:document.getElementById("ed").value.trim(),estimate_label:document.getElementById("ee2").value.trim()}).eq("id",r.current_version_id);if(z.error)throw z.error;closeModal();toast("Entwurf gespeichert");await openRegie(r.id)}catch(e){toast(em(e))}}}
