@@ -252,29 +252,54 @@ async function signupSuccessPage(sessionId){
     return;
   }
   if(state.status==="provisioned"){
-    document.getElementById("signupfinish").innerHTML='<div class="notice ok"><strong>Deine Firma ist bereits aktiviert.</strong></div><button id="gotologin" class="btn primary" style="width:100%;margin-top:12px">Anmelden</button>';
-    document.getElementById("gotologin").onclick=()=>{history.replaceState({},"",APP);login()};
+    const session=(await sb.auth.getSession()).data.session;
+    document.getElementById("signupfinish").innerHTML='<div class="notice ok"><strong>Deine Firma ist bereits aktiviert.</strong></div><button id="gotologin" class="btn primary" style="width:100%;margin-top:12px">'+(session?"RegieFlow öffnen":"Anmelden")+'</button>';
+    document.getElementById("gotologin").onclick=async()=>{history.replaceState({},"",APP);if(session){S.session=session;await context()}else login()};
     return;
   }
+
   const label={starter:"Starter",team:"Team",business:"Business"}[state.plan]||state.plan;
-  document.getElementById("signupfinish").innerHTML='<div class="notice ok"><strong>Zahlung bestätigt.</strong><br>'+esc(state.companyName)+' · '+esc(label)+'</div><div id="existinglogin"></div><div id="newpassword"><div class="field"><label class="label">E-Mail</label><input id="paidemail" class="input" value="'+esc(state.email)+'" disabled></div><div class="field"><label class="label">Passwort festlegen</label><input id="paidpw1" class="input" type="password" autocomplete="new-password" placeholder="mindestens 10 Zeichen"></div><div class="field"><label class="label">Passwort wiederholen</label><input id="paidpw2" class="input" type="password" autocomplete="new-password"></div><button id="finishpaid" class="btn primary" style="width:100%">Firma aktivieren</button></div>';
+  const session=(await sb.auth.getSession()).data.session;
+  const signedEmail=String(session?.user?.email||"").toLowerCase();
+  const targetEmail=String(state.email||"").toLowerCase();
+
+  document.getElementById("signupfinish").innerHTML='<div class="notice ok"><strong>Zahlung bestätigt.</strong><br>'+esc(state.companyName)+' · '+esc(label)+'</div><div id="signupaccount" style="margin-top:14px"></div>';
+
   const complete=async(password="")=>{
     try{
       const o=await invoke("rf-complete-paid-signup",{intentId:state.intentId,completionToken:state.completionToken,password});
+      if(o.verificationRequired){
+        document.getElementById("signupfinish").innerHTML='<div class="notice ok"><strong>Bestätigungs-E-Mail gesendet.</strong><br>Öffne den Link in der E-Mail an '+esc(o.email||state.email)+'. Danach wird deine Firma aktiviert.</div><div class="small muted" style="margin-top:12px">Falls die E-Mail nicht ankommt, prüfe auch den Spam-Ordner.</div>';
+        return;
+      }
       if(o.createdUser){
         const s=await sb.auth.signInWithPassword({email:o.email,password});if(s.error)throw s.error;S.session=s.data.session;
       }else{
         S.session=(await sb.auth.getSession()).data.session;
       }
-      history.replaceState({},"",APP);await context();
+      history.replaceState({},"",APP);
+      if(S.session)await context();else login("Firma aktiviert. Bitte anmelden.");
     }catch(e){
       if(e.code==="LOGIN_REQUIRED"){
-        document.getElementById("newpassword").classList.add("hidden");
-        document.getElementById("existinglogin").innerHTML='<div class="notice">Für diese E-Mail existiert bereits ein RegieFlow-Konto. Melde dich an, um die neue Firma damit zu verknüpfen.</div><div class="field"><label class="label">Passwort</label><input id="existingpaidpw" class="input" type="password" autocomplete="current-password"></div><button id="existingpaidgo" class="btn primary" style="width:100%">Anmelden & Firma aktivieren</button>';
+        document.getElementById("signupaccount").innerHTML='<div class="notice">Für diese E-Mail existiert bereits ein RegieFlow-Konto. Melde dich mit diesem Konto an, um die neue Firma zu verknüpfen.</div><div class="field"><label class="label">Passwort</label><input id="existingpaidpw" class="input" type="password" autocomplete="current-password"></div><button id="existingpaidgo" class="btn primary" style="width:100%">Anmelden & Firma aktivieren</button>';
         document.getElementById("existingpaidgo").onclick=async()=>{try{const p=document.getElementById("existingpaidpw").value;const s=await sb.auth.signInWithPassword({email:state.email,password:p});if(s.error)throw s.error;S.session=s.data.session;await complete("")}catch(x){toast(em(x))}};
       }else toast(em(e));
     }
   };
+
+  if(session&&signedEmail&&signedEmail!==targetEmail){
+    document.getElementById("signupaccount").innerHTML='<div class="notice warn"><strong>Falsches Konto angemeldet.</strong><br>Die Zahlung gehört zu '+esc(state.email)+', du bist aber als '+esc(session.user.email||"")+' angemeldet.</div><button id="signoutpaid" class="btn" style="width:100%;margin-top:12px">Abmelden & fortfahren</button>';
+    document.getElementById("signoutpaid").onclick=async()=>{await sb.auth.signOut();await signupSuccessPage(sessionId)};
+    return;
+  }
+
+  if(session&&signedEmail===targetEmail){
+    document.getElementById("signupaccount").innerHTML='<div class="notice">E-Mail-Konto bestätigt und angemeldet.</div><button id="activatepaid" class="btn primary" style="width:100%;margin-top:12px">Firma aktivieren</button>';
+    document.getElementById("activatepaid").onclick=()=>complete("");
+    return;
+  }
+
+  document.getElementById("signupaccount").innerHTML='<div class="field"><label class="label">E-Mail</label><input class="input" value="'+esc(state.email)+'" disabled></div><div class="field"><label class="label">Passwort festlegen</label><input id="paidpw1" class="input" type="password" autocomplete="new-password" placeholder="mindestens 10 Zeichen"></div><div class="field"><label class="label">Passwort wiederholen</label><input id="paidpw2" class="input" type="password" autocomplete="new-password"></div><button id="finishpaid" class="btn primary" style="width:100%">Konto erstellen</button>';
   document.getElementById("finishpaid").onclick=async()=>{const p1=document.getElementById("paidpw1").value,p2=document.getElementById("paidpw2").value;if(p1.length<10)return toast("Passwort muss mindestens 10 Zeichen lang sein.");if(p1!==p2)return toast("Die Passwörter stimmen nicht überein.");await complete(p1)};
 }
 function recoveryPage(){
