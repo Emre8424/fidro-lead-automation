@@ -4,7 +4,7 @@
 
 ## Freigabe
 
-Die FIDRO GmbH bestätigt, dass die offizielle **WhatsApp Business Platform / Cloud API von Meta** für die FIDRO Lead Automation zum Zweck der dokumentierten Kontaktaufnahme mit einwilligenden Leads sowie zur Terminvereinbarung eingesetzt werden darf.
+Die FIDRO GmbH bestätigt, dass die offizielle **WhatsApp Business Platform / Cloud API von Meta** für die FIDRO Lead Automation zum Zweck der dokumentierten Kontaktaufnahme mit einwilligenden Leads sowie zur Terminvereinbarung eingesetzt werden darf. Die Freigabe umfasst ausdrücklich die Nutzung der aktuell für die technische Bereitstellung verwendeten Meta-Business-Assets und der registrierten WhatsApp-Produktionsnummer im Namen von FIDRO, sofern diese Assets nicht unmittelbar im eigenen FIDRO-Business-Portfolio liegen.
 
 Die Freigabe gilt unter folgenden Bedingungen:
 
@@ -17,6 +17,8 @@ Die Freigabe gilt unter folgenden Bedingungen:
 - unklare oder fachliche Antworten werden an einen Mitarbeiter übergeben;
 - Opt-outs, Einwilligungsnachweise, Versandereignisse und Terminbestätigungen werden nachvollziehbar protokolliert;
 - technische Sicherheits- und Produktions-Gates dürfen nicht umgangen werden;
+- die Person bzw. Organisation, welche die Meta-Business-Assets verwaltet, ist zur technischen Verarbeitung im Auftrag bzw. mit ausdrücklicher Erlaubnis von FIDRO berechtigt;
+- Änderungen an Meta-Business-Portfolio, WhatsApp-Produktionsnummer oder Asset-Inhaberschaft werden vor weiterer Nutzung erneut geprüft;
 - Änderungen an Zweck, Datenumfang oder automatisierter Beratung bedürfen einer erneuten internen Prüfung.
 
 **Freigegeben durch:**  
