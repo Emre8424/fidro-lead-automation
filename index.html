@@ -34,7 +34,7 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 <section id="import" class="tab hide"><div class="card"><h3>Copy/Paste Import</h3><p class="muted">Arilla-Liste, Arilla-Detailansicht oder Gewinnspiel-Export. Die Kampagne wird pro Lead automatisch aus der Arilla-Zeile erkannt. Vorschau zuerst prüfen.</p>
 <textarea id="raw" placeholder="Hier direkt aus Arilla oder dem Export einfügen..."></textarea>
 <div class="actions" style="margin-top:9px"><button onclick="previewImport()">Vorschau</button><button class="good" onclick="doImport()">Importieren</button></div><div id="preview"></div></div></section>
-<section id="leads" class="tab hide"><div class="card"><h3>Leads</h3><p class="muted">Bei bestehender WhatsApp-Einwilligung genügt ein Klick auf „Opt-in“. Die erkannte Kampagne wird automatisch als Quelle hinterlegt.</p><div class="scroll"><table><thead><tr><th>Name</th><th>Telefon</th><th>Phase</th><th>Quelle</th><th>WA-Einwilligung</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="leadRows"></tbody></table></div></div></section>
+<section id="leads" class="tab hide"><div class="card"><h3>Leads</h3><p class="muted">Bei bestehender WhatsApp-Einwilligung kannst du einzelne Leads oder eine ganze Kampagne freigeben.</p><div id="bulkOptInBar" class="row" style="margin:10px 0"></div><div class="scroll"><table><thead><tr><th>Name</th><th>Telefon</th><th>Phase</th><th>Quelle</th><th>WA-Einwilligung</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="leadRows"></tbody></table></div></div></section>
 <section id="drafts" class="tab hide"><div class="card"><h3>Mail-Entwürfe</h3><p class="muted">Pro bestätigtem Termin entstehen genau zwei Entwürfe: intern an leads@fidro.ch und für den Kunden. „In Gmail öffnen“ öffnet nur den Entwurf. Nach dem tatsächlichen Versand bitte „Als gesendet markieren“ drücken; danach erscheint der Status dauerhaft grün.</p><div id="draftList"></div></div></section>
 <section id="audit" class="tab hide"><div class="card"><h3>Audit</h3><p class="muted">Letzte System- und Operatorereignisse. Dient der Nachvollziehbarkeit von Opt-ins, Opt-outs, Versand, Handoffs und Terminbestätigungen.</p><div class="scroll"><table><thead><tr><th>Zeit</th><th>Ereignis</th><th>Akteur</th><th>Lead</th><th>Details</th></tr></thead><tbody id="auditRows"></tbody></table></div></div></section>
 </main>
@@ -171,6 +171,7 @@ function phase(p){return({neu:"Neu",nicht_erreicht:"Nicht erreicht",in_bearbeitu
 async function loadLeads(){
   try{
     LEADS=await call("/leads");
+    renderBulkOptIn();
     document.getElementById("leadRows").innerHTML=LEADS.map(function(l){
       var excluded=l.phase==="nicht_brauchbar";
       var revoked=!!l.opt_out_at||l.automation_status==="opted_out";
@@ -194,6 +195,48 @@ async function loadLeads(){
     }).join("");
   }catch(e){toast(e.message)}
 }
+function renderBulkOptIn(){
+  var bar=document.getElementById("bulkOptInBar");
+  if(!bar)return;
+  var counts={};
+  LEADS.forEach(function(l){
+    var revoked=!!l.opt_out_at||l.automation_status==="opted_out";
+    var excluded=l.phase==="nicht_brauchbar"||l.automation_status==="excluded";
+    var optin=l.lawful_acquisition_confirmed===true&&l.whatsapp_opt_in_confirmed===true&&!revoked;
+    var adult=true;
+    if(l.birth_date){
+      var bd=new Date(l.birth_date+"T00:00:00Z"),now=new Date(),cut=new Date(Date.UTC(now.getUTCFullYear()-18,now.getUTCMonth(),now.getUTCDate()));
+      adult=!isNaN(bd.getTime())&&bd<=cut;
+    }
+    var campaign=(l.campaign||l.source_description||"").trim();
+    if(campaign&&!excluded&&!revoked&&adult&&!optin)counts[campaign]=(counts[campaign]||0)+1;
+  });
+  var campaigns=Object.keys(counts).sort();
+  if(!campaigns.length){bar.innerHTML='<span class="badge green">Alle zulässigen Leads sind freigegeben</span>';return}
+  var options=campaigns.map(function(c){return'<option value="'+esc(c)+'">'+esc(c)+' · '+counts[c]+' Leads</option>'}).join("");
+  bar.innerHTML='<select id="bulkCampaign">'+options+'</select><button class="warn" onclick="bulkOptIn()">Alle dieser Kampagne freigeben</button><span class="muted">Einmal bestätigen statt jeden Lead einzeln.</span>';
+}
+async function bulkOptIn(){
+  var sel=document.getElementById("bulkCampaign");
+  if(!sel||!sel.value)return toast("Keine Kampagne ausgewählt");
+  var campaign=sel.value;
+  var count=LEADS.filter(function(l){
+    return (l.campaign||l.source_description||"").trim()===campaign &&
+      l.phase!=="nicht_brauchbar" &&
+      l.automation_status!=="excluded" &&
+      l.automation_status!=="opted_out" &&
+      !l.opt_out_at &&
+      !(l.lawful_acquisition_confirmed===true&&l.whatsapp_opt_in_confirmed===true);
+  }).length;
+  if(!confirm("Alle zulässigen Leads der Kampagne „"+campaign+"“ als WhatsApp-Opt-in bestätigen?\n\nCa. "+count+" Leads. U18, Opt-outs, Sperrliste und ausgeschlossene Leads bleiben automatisch gesperrt.\n\nBitte nur fortfahren, wenn die WhatsApp-Einwilligung für diese Kampagne tatsächlich vorliegt."))return;
+  try{
+    var r=await call("/campaign-opt-in-bulk",{method:"POST",body:JSON.stringify({campaign:campaign})});
+    toast("Bulk-Opt-in: "+r.confirmed+" freigegeben");
+    await loadLeads();
+    await loadDash();
+  }catch(e){toast(e.message)}
+}
+
 async function startWa(id){
   if(DASH&&DASH.settings.automation_paused)return toast("Automation ist pausiert");
   if(!confirm("Erstkontakt über WhatsApp starten?"))return;
