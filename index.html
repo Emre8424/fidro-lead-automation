@@ -140,7 +140,6 @@ async function startProductionTest(){
 }
 async function saveBusinessAuthorization(){var by=document.getElementById("bizAuthBy").value.trim(),ref=document.getElementById("bizAuthRef").value.trim();if(by.length<3||ref.length<5)return toast("Name/Funktion und Nachweis sind Pflicht");if(!confirm("Bestätigst du, dass diese FIDRO-Freigabe tatsächlich vorliegt?"))return;try{await call("/business-authorization",{method:"POST",body:JSON.stringify({authorized_by:by,reference:ref})});document.getElementById("bizAuth").close();toast("FIDRO-Freigabe dokumentiert");await loadDash()}catch(e){toast(e.message)}}
 async function togglePause(){try{if(DASH.settings.automation_paused){var r=await loadReadiness();if(!r.ready){toast("Noch nicht produktionsbereit – siehe rote Punkte.");return}}await call("/pause",{method:"POST",body:JSON.stringify({paused:!DASH.settings.automation_paused})});await loadDash()}catch(e){toast(e.message==="production_not_ready"?"Noch nicht produktionsbereit – siehe rote Punkte.":e.message)}}
-}
 async function previewImport(){
   var text=document.getElementById("raw").value;
   if(!text.trim())return toast("Text fehlt");
