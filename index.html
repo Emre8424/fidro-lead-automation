@@ -34,7 +34,7 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 <section id="import" class="tab hide"><div class="card"><h3>Copy/Paste Import</h3><p class="muted">Arilla-Liste, Arilla-Detailansicht oder Gewinnspiel-Export. Die Kampagne wird pro Lead automatisch aus der Arilla-Zeile erkannt. Vorschau zuerst prüfen.</p>
 <textarea id="raw" placeholder="Hier direkt aus Arilla oder dem Export einfügen..."></textarea>
 <div class="actions" style="margin-top:9px"><button onclick="previewImport()">Vorschau</button><button class="good" onclick="doImport()">Importieren</button></div><div id="preview"></div></div></section>
-<section id="leads" class="tab hide"><div class="card"><h3>Leads</h3><p class="muted">WhatsApp wird nur freigegeben, wenn eine nachweisbare Einwilligung für Nachrichten von FIDRO über WhatsApp hinterlegt ist.</p><div class="scroll"><table><thead><tr><th>Name</th><th>Telefon</th><th>Phase</th><th>Quelle</th><th>WA-Einwilligung</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="leadRows"></tbody></table></div></div></section>
+<section id="leads" class="tab hide"><div class="card"><h3>Leads</h3><p class="muted">Bei bestehender WhatsApp-Einwilligung genügt ein Klick auf „Opt-in“. Die erkannte Kampagne wird automatisch als Quelle hinterlegt.</p><div class="scroll"><table><thead><tr><th>Name</th><th>Telefon</th><th>Phase</th><th>Quelle</th><th>WA-Einwilligung</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="leadRows"></tbody></table></div></div></section>
 <section id="drafts" class="tab hide"><div class="card"><h3>Mail-Entwürfe</h3><p class="muted">Pro bestätigtem Termin entstehen genau zwei Entwürfe: intern an leads@fidro.ch und für den Kunden. „In Gmail öffnen“ öffnet nur den Entwurf. Nach dem tatsächlichen Versand bitte „Als gesendet markieren“ drücken; danach erscheint der Status dauerhaft grün.</p><div id="draftList"></div></div></section>
 <section id="audit" class="tab hide"><div class="card"><h3>Audit</h3><p class="muted">Letzte System- und Operatorereignisse. Dient der Nachvollziehbarkeit von Opt-ins, Opt-outs, Versand, Handoffs und Terminbestätigungen.</p><div class="scroll"><table><thead><tr><th>Zeit</th><th>Ereignis</th><th>Akteur</th><th>Lead</th><th>Details</th></tr></thead><tbody id="auditRows"></tbody></table></div></div></section>
 </main>
@@ -47,13 +47,6 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 <label>Dauer</label><select id="duration" style="width:100%"><option value="60">ca. 60 Minuten</option><option value="45">ca. 45 Minuten</option></select>
 <p class="muted">Teams-Link wird später separat vom Berater verschickt.</p>
 <div class="actions"><button class="good" onclick="saveAppointment()">Bestätigen</button><button class="secondary" onclick="document.getElementById('book').close()">Abbrechen</button></div></div></dialog>
-<dialog id="consent"><div class="modal"><h3>WhatsApp-Einwilligung erfassen</h3><input type="hidden" id="consentLeadId">
-<p class="muted">Nur erfassen, wenn die Einwilligung tatsächlich vorliegt. Der Wortlaut muss FIDRO und WhatsApp ausdrücklich nennen.</p>
-<label>Quelle / Nachweis *</label><input id="consentSource" placeholder="z.B. FIDRO Gewinnspielformular 2026" style="width:100%">
-<label>Zeitpunkt der Einwilligung *</label><input id="consentAt" type="datetime-local" style="width:100%">
-<label>Exakter Einwilligungswortlaut *</label><textarea id="consentWording" style="min-height:130px" placeholder="Exakten Wortlaut aus Formular/Quelle einfügen..."></textarea>
-<p class="muted"><b>Für zukünftige Gewinnspielformulare:</b> separate, nicht vorausgewählte WhatsApp-Checkbox verwenden. Empfohlener Wortlaut: „Ich bin einverstanden, dass die FIDRO GmbH mich im Zusammenhang mit dem Gewinnspiel sowie zu Beratungs- und Marketingzwecken per WhatsApp kontaktiert. Ich kann diese Einwilligung jederzeit widerrufen, z.B. mit STOP. Datenschutzerklärung: https://fidro.ch/datenschutz“</p>
-<div class="actions"><button class="good" onclick="saveConsent()">Nachweis speichern</button><button class="secondary" onclick="document.getElementById('consent').close()">Abbrechen</button></div></div></dialog>
 <dialog id="bizAuth"><div class="modal"><h3>FIDRO-Freigabe dokumentieren</h3>
 <p class="muted">Nur erfassen, wenn FIDRO die Nutzung der WhatsApp Cloud API / Meta für diese Lead-Automation tatsächlich freigegeben hat.</p>
 <label>Freigabe durch *</label><input id="bizAuthBy" placeholder="Name / Funktion" style="width:100%">
@@ -191,7 +184,7 @@ async function loadLeads(){
           : '<span class="badge red">FEHLT</span>';
       var actions="";
       if(ready) actions+='<button class="small good" onclick="startWa(\''+l.id+'\')">WA starten</button>';
-      if(!excluded&&adult&&!revoked&&!optin) actions+='<button class="small warn" onclick="openConsent(\''+l.id+'\')">Opt-in erfassen</button>';
+      if(!excluded&&adult&&!revoked&&!optin) actions+='<button class="small warn" onclick="quickOptIn(\''+l.id+'\')">Opt-in</button>';
       if(!excluded){
         actions+='<button class="small" onclick="openBook(\''+l.id+'\')">Termin</button>';
         actions+='<button class="small secondary" onclick="statusLead(\''+l.id+'\',\'human_handoff\')">Übernehmen</button>';
@@ -229,8 +222,28 @@ async function startWa(id){
     toast(msg);
   }
 }
-function openConsent(id){var l=LEADS.find(function(x){return x.id===id});if(!l)return;document.getElementById("consentLeadId").value=id;document.getElementById("consentSource").value="";document.getElementById("consentWording").value="";var now=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);document.getElementById("consentAt").value=now;document.getElementById("consent").showModal()}
-async function saveConsent(){var id=document.getElementById("consentLeadId").value,source=document.getElementById("consentSource").value.trim(),wording=document.getElementById("consentWording").value.trim(),at=document.getElementById("consentAt").value;if(!source||!wording||!at)return toast("Quelle, Zeitpunkt und exakter Wortlaut sind Pflicht");if(!/whatsapp/i.test(wording)||!/fidro/i.test(wording))return toast("Der Nachweis muss WhatsApp und FIDRO ausdrücklich nennen");if(!confirm("Bestätigst du, dass dieser Einwilligungsnachweis tatsächlich aus der angegebenen Quelle stammt?"))return;try{await call("/whatsapp-consent",{method:"POST",body:JSON.stringify({lead_id:id,source:source,wording:wording,consent_at:new Date(at).toISOString()})});document.getElementById("consent").close();toast("WhatsApp-Einwilligung dokumentiert");await loadLeads();await loadDash()}catch(e){toast(e.message==="whatsapp_consent_wording_invalid"?"Einwilligungswortlaut ist nicht ausreichend":e.message)}}
+async function quickOptIn(id){
+  var l=LEADS.find(function(x){return x.id===id});
+  if(!l)return;
+  var campaign=(l.campaign||l.source_description||"").trim();
+  if(!campaign)return toast("Für diesen Lead fehlt die Kampagne");
+  if(!confirm("Opt-in für „"+campaign+"“ bestätigen? Bitte nur fortfahren, wenn die WhatsApp-Einwilligung für diese Kampagne tatsächlich vorliegt."))return;
+  try{
+    await call("/campaign-opt-in",{method:"POST",body:JSON.stringify({lead_id:id})});
+    toast("Opt-in bestätigt · "+campaign);
+    await loadLeads();
+    await loadDash();
+  }catch(e){
+    var m={
+      lead_under_18:"U18 · kein WhatsApp-Erstkontakt",
+      lead_suppressed:"Kontakt steht auf der Sperrliste",
+      lead_opted_out:"Kontakt hat bereits widersprochen",
+      campaign_required:"Kampagne fehlt",
+      lead_stopped:"Lead ist ausgeschlossen"
+    }[e.message]||e.message;
+    toast(m);
+  }
+}
 async function statusLead(id,status){try{await call("/lead-status",{method:"POST",body:JSON.stringify({id:id,status:status})});await loadLeads();await loadDash()}catch(e){toast(e.message)}}
 function openBook(id){var l=LEADS.find(function(x){return x.id===id});document.getElementById("leadId").value=id;document.getElementById("email").value=l&&l.email?l.email:"";document.getElementById("date").value="";document.getElementById("addr").value="";document.getElementById("book").showModal()}
 function addrVis(){document.getElementById("addrWrap").classList.toggle("hide",document.getElementById("kind").value!=="customer")}
