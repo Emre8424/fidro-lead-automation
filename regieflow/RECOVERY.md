@@ -1,17 +1,19 @@
-# RegieFlow recovery notes
+# RegieFlow recovery and production notes
 
-This branch contains the RegieFlow frontend and source snapshots of the active RegieFlow Edge Functions.
-
-## Canonical development deployment
+## Canonical deployment
 
 - Frontend: https://regieflow.pages.dev/
+- Frontend source: `regieflow/index.html`, `regieflow/app.js`, `regieflow/sw.js`
 - Supabase project ref: `kiihabzzepoehsokglzq`
-- RegieFlow shares the Supabase project with DriveLoop during development. RegieFlow public tables use the `rf_` prefix and private server configuration uses the `regieflow_private` schema.
+- RegieFlow currently shares this development Supabase project with DriveLoop.
+- RegieFlow public database objects use the `rf_` prefix.
+- Server-only RegieFlow state is in the `regieflow_private` schema.
 - Do not modify DriveLoop tables/functions while restoring RegieFlow.
 
-## Active Edge Function source snapshots
+## Active RegieFlow Edge Function source snapshots
 
-Stored below `regieflow/supabase/functions/`:
+Current function source snapshots are stored below `regieflow/supabase/functions/`:
+
 - rf-public-approval
 - rf-auth-approval
 - rf-create-internal-user
@@ -19,65 +21,125 @@ Stored below `regieflow/supabase/functions/`:
 - rf-customer-signup
 - rf-push
 - rf-upload-evidence
+- rf-create-checkout
+- rf-stripe-webhook
+- rf-onboarding-status
+- rf-complete-paid-signup
+- rf-billing-portal
+- rf-sync-seat-billing
+- rf-health
+- rf-billing-readiness
+- rf-public-legal
 
-Secrets are intentionally not committed. VAPID private keys, hook secrets and service-role credentials remain server-side only.
+Retired development/static endpoints may still exist in the Supabase project but are JWT-protected and are not part of the production flow.
 
-## RegieFlow migration history
+Secrets are intentionally not committed. Service-role keys, Stripe secrets/webhook secrets, VAPID private keys and internal hook secrets must remain outside Git.
 
-- `20261001071253_regieflow_core_tables_v1`
-- `20261001071337_regieflow_rls_v1`
-- `20261001071456_regieflow_workflows_v1`
-- `20261001071545_regieflow_security_hardening_v1`
-- `20261001071617_regieflow_private_dev_log_v1`
-- `20261001071638_regieflow_storage_rls_v1`
-- `20261001071723_regieflow_customer_finalization_v1`
-- `20261001072002_regieflow_onboarding_permissions_v1`
-- `20261001072153_regieflow_customer_invites_v1`
-- `20261001072206_regieflow_internal_account_onboarding_v1`
-- `20261001072332_regieflow_pricing_catalog_v1`
-- `20261001072407_regieflow_storage_evidence_hardening_v1`
-- `20261001072451_regieflow_frontend_api_v1`
-- `20261001072539_regieflow_customer_request_flow_v1`
-- `20261001072608_regieflow_owner_safety_v1`
-- `20261001072708_regieflow_regie_creation_revision_v1`
-- `20261001072923_regieflow_privileges_integrity_v1`
-- `20261001073013_regieflow_realtime_v1`
-- `20261001073222_regieflow_dev_setup_tokens_v1`
-- `20261001073238_regieflow_dev_setup_rpc_v1`
-- `20261001074138_regieflow_web_push_foundation_v1`
-- `20261001074817_regieflow_customer_request_prepare_v1`
-- `20261001074951_regieflow_onboarding_lockdown_v1`
-- `20261001075023_regieflow_performance_pass_v1`
-- `20261001075623_regieflow_static_web_bucket_v1`
-- `20261001085635_regieflow_service_role_permissions_fix_v1`
-- `20261001090032_isolate_regieflow_users_from_driveloop_profiles`
-- `20261001091548_regieflow_neutral_rapport_wording_v1`
-- `20261001092752_regieflow_neutral_external_references_v1`
-- `20261001092849_regieflow_close_rpc_compatibility_v1`
-- `20261001093014_regieflow_signature_evidence_v2`
-- `20261001094803_regieflow_close_regie_v2_v1`
-- `20261001094856_regieflow_revoke_unsafe_table_privileges_v1`
-- `20261001094910_regieflow_overview_privileges_hardening_v1`
-- `20261001094944_regieflow_audit_log_internal_only_v1`
-- `20261001095005_regieflow_signature_select_internal_only_v1`
-- `20261001095042_regieflow_remove_legacy_rpcs_v1`
-- `20261001095124_regieflow_customer_request_approval_permission_v1`
-- `20261001095211_regieflow_file_immutability_v1`
-- `20261001095235_regieflow_revision_file_state_fix_v1`
-- `20261001100556_regieflow_human_notification_status_labels_v1`
-- `20261001102042_regieflow_restore_required_client_dml_v1`
-- `20261001102443_regieflow_neutralize_overview_columns_v1`
-- `20261001102742_regieflow_split_rls_write_policies_v1`
-- `20261001102926_regieflow_disable_obsolete_public_web_bucket_v1`
-- `20261001102958_regieflow_public_link_first_view_evidence_v1`
-- `20261001103125_regieflow_limit_team_directory_visibility_v1`
-- `20261001103306_regieflow_lightweight_comments_v1`
-- `20261001103511_regieflow_project_input_constraints_v1`
-- `20261001103634_regieflow_evidence_uploader_provenance_v1`
-- `20261001103849_regieflow_server_side_evidence_registration_v1`
+## Core production invariants
 
-## Production migration note
+- Every Regie belongs to one company and one project.
+- Submitted Regie versions are immutable.
+- At least one before-work image is mandatory before submission.
+- A customer may approve only the current submitted version and only when authorized for that project.
+- Signed Regie PDFs and approval records are append-only and version-bound.
+- Closed Regien require a Rapportnummer.
+- Historical signed PDFs remain accessible; current evidence is shown per current version.
+- Customer accounts are free and are not counted as paid internal seats.
+- Paid companies become read-only if their subscription is not in an allowed write state.
+- Primary Owner cannot be accidentally deactivated or stripped of ownership through normal member management.
 
-Before a public paid launch, prefer moving RegieFlow to its own Supabase project. Reapply the RegieFlow migration chain, deploy the Edge Functions, recreate private storage buckets/configuration, set the frontend environment constants, then run the full end-to-end workflow before switching DNS.
+## Production readiness gate
 
-The authoritative chronological implementation notes remain in `regieflow_private.dev_log` in Supabase.
+Public paid onboarding is implemented but deliberately hard-gated. `rf-billing-readiness` must report `ready: true` before public signup can proceed.
+
+The following must all be true:
+
+1. Published legal pages exist.
+2. Stripe plan Price IDs and required Stripe secrets are configured.
+3. Email confirmation + production SMTP have been verified.
+4. Leaked-password protection has been enabled and verified.
+5. Backup/recovery has been configured and tested.
+
+The private checklist is authoritative:
+`regieflow_private.launch_checklist`.
+
+## Backup / recovery
+
+The current Supabase Free setup must not be treated as sufficient production backup.
+
+Before public launch choose one:
+
+### Preferred production setup
+Move RegieFlow to its own paid Supabase project and enable managed backups appropriate to the required retention/RPO. Storage still needs its own off-site protection because database backups do not restore deleted Storage objects.
+
+### Temporary/self-managed setup
+Run recurring off-site exports:
+
+- Database: `supabase db dump --data-only --linked`
+- Schema/migrations: keep the complete RegieFlow migration chain in source control / export current schema before cutover.
+- Storage: export all objects from `rf-private` and `rf-branding` to an encrypted off-site bucket.
+- Edge Functions: source snapshots live in this branch.
+- Frontend: versioned in this branch.
+- Secrets/configuration: document names/locations, never commit plaintext values.
+
+A restore drill must recreate:
+- database schema + data,
+- Auth users,
+- `rf-private` and `rf-branding` objects,
+- Edge Functions,
+- private server configuration/secrets,
+- frontend configuration,
+then pass the full Regie E2E test.
+
+## Tested live flows
+
+Live test milestones already completed:
+
+- Owner/company bootstrap
+- Project + customer contacts
+- Internal Regie creation
+- Mandatory before image
+- Direct-to-customer flow
+- Revision/version lock
+- Secure public approval link
+- Customer signature + explicit consent
+- Immutable signed PDF + SHA-256
+- Execution start
+- Work completion
+- Rapportnummer closeout
+- Archive access
+- Customer account invitation/signup
+- Customer-created request
+- Office acceptance/assignment
+- Customer/office comments
+- Notification deep links
+
+The remaining browser-only tests are tracked in the private launch checklist.
+
+## Migration history
+
+The authoritative migration history is in Supabase. Use `mcp list_migrations` / Supabase CLI before a restore or production move. RegieFlow migrations start at:
+
+`20261001071253_regieflow_core_tables_v1`
+
+and continue through the latest `regieflow_*` migrations. Do not replay DriveLoop migrations into a standalone RegieFlow project unless they are explicitly required by a shared dependency.
+
+## Production move recommendation
+
+Before public paid launch, prefer giving RegieFlow its own Supabase project instead of sharing the DriveLoop development project.
+
+Migration sequence:
+
+1. Create a dedicated Supabase project.
+2. Apply only RegieFlow schema/migrations and required extensions.
+3. Create private Storage buckets `rf-private` and `rf-branding`.
+4. Deploy all active RegieFlow Edge Functions from the snapshots above.
+5. Recreate private configuration/secrets.
+6. Configure Stripe webhook destination and Price IDs.
+7. Configure email confirmation, SMTP and password protection.
+8. Restore/copy production data if needed.
+9. Update frontend Supabase URL/publishable key.
+10. Run the full E2E test and integrity self-check.
+11. Only then point the public domain to the production deployment.
+
+The chronological implementation log remains in `regieflow_private.dev_log`.
