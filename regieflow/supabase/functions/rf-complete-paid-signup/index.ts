@@ -19,6 +19,7 @@ Deno.serve(async(req:Request)=>{
   const url=Deno.env.get("SUPABASE_URL");
   const anon=Deno.env.get("SUPABASE_ANON_KEY");
   const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const stripe=Deno.env.get("STRIPE_SECRET_KEY");
   if(!url||!anon||!service)return json({error:"Server configuration missing"},500);
 
   const admin=createClient(url,service,{auth:{persistSession:false}});
@@ -110,6 +111,33 @@ Deno.serve(async(req:Request)=>{
         p_provider_event_id:eventId
       });
       if(pe)throw pe;
+
+      // A subscription.created/updated webhook can arrive before the company exists.
+      // Reconcile once more after provisioning so the initial billing row reflects
+      // Stripe's actual state even when event ordering was unfavorable.
+      if(stripe&&intent.stripe_subscription_id){
+        try{
+          const sr=await fetch("https://api.stripe.com/v1/subscriptions/"+encodeURIComponent(String(intent.stripe_subscription_id)),{
+            headers:{"Authorization":"Bearer "+stripe}
+          });
+          const sub=await sr.json();
+          if(sr.ok&&sub?.id){
+            const end=sub.current_period_end?new Date(Number(sub.current_period_end)*1000).toISOString():null;
+            await admin.rpc("rf_apply_subscription_state",{
+              p_company_id:companyId,
+              p_plan:intent.plan,
+              p_stripe_customer_id:typeof sub.customer==="string"?sub.customer:(sub.customer?.id||intent.stripe_customer_id),
+              p_stripe_subscription_id:String(sub.id),
+              p_stripe_price_id:intent.stripe_price_id,
+              p_subscription_status:String(sub.status||"unknown"),
+              p_current_period_end:end,
+              p_cancel_at_period_end:!!sub.cancel_at_period_end,
+              p_provider_event_id:"onboarding-sync:"+String(intent.stripe_checkout_session_id||intent.id),
+              p_billing_email:intent.email
+            });
+          }
+        }catch(_){}
+      }
 
       return json({
         status:"provisioned",
