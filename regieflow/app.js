@@ -112,18 +112,28 @@ async function hashFile(f){const h=await crypto.subtle.digest("SHA-256",await f.
 function b64key(s){const p="=".repeat((4-s.length%4)%4),b=(s+p).replace(/-/g,"+").replace(/_/g,"/"),raw=atob(b),a=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)a[i]=raw.charCodeAt(i);return a}
 async function normalizeImageFile(file){
   if(!file||!String(file.type||"").startsWith("image/"))return file;
-  if(["image/jpeg","image/png"].includes(file.type))return file;
+  const accepted=["image/jpeg","image/png"].includes(file.type);
+  const smallEnough=accepted&&file.size<=2.5*1024*1024;
+  if(smallEnough)return file;
   try{
     const bmp=await createImageBitmap(file);
+    const maxSide=2200;
+    const scale=Math.min(1,maxSide/Math.max(bmp.width,bmp.height));
     const canvas=document.createElement("canvas");
-    canvas.width=bmp.width;canvas.height=bmp.height;
+    canvas.width=Math.max(1,Math.round(bmp.width*scale));
+    canvas.height=Math.max(1,Math.round(bmp.height*scale));
     const ctx=canvas.getContext("2d");
-    ctx.drawImage(bmp,0,0);
+    ctx.drawImage(bmp,0,0,canvas.width,canvas.height);
     if(bmp.close)bmp.close();
-    const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error("Bild konnte nicht konvertiert werden.")),"image/jpeg",0.9));
+    const blob=await new Promise((resolve,reject)=>canvas.toBlob(
+      b=>b?resolve(b):reject(new Error("Bild konnte nicht konvertiert werden.")),
+      "image/jpeg",
+      0.85
+    ));
     const base=(file.name||"foto").replace(/\.[^.]+$/,"");
     return new File([blob],base+".jpg",{type:"image/jpeg",lastModified:file.lastModified||Date.now()});
   }catch{
+    if(accepted&&file.size<=20*1024*1024)return file;
     throw new Error("Dieses Bildformat wird vom Browser nicht unterstützt. Bitte JPEG oder PNG verwenden.");
   }
 }
