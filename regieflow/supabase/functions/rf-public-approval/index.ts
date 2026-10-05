@@ -83,6 +83,7 @@ async function loadApproval(admin: ReturnType<typeof createClient>, token: strin
   if (projectError) throw projectError;
   if (companyError) throw companyError;
   if (contactError) throw contactError;
+  if (!contact.active || contact.company_id !== regie.company_id) throw new Error("Freigabeberechtigung ist nicht mehr aktiv");
 
   const { data: access, error: accessError } = await admin
     .from("rf_project_customer_access")
@@ -141,7 +142,7 @@ async function buildPdf(
 ) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Regie ${ctx.regie.regie_code}`);
-  pdf.setAuthor(ctx.company.name);
+  pdf.setAuthor(ctx.company.legal_name || ctx.company.name);
   pdf.setSubject("Digitale Regiefreigabe");
   pdf.setCreator("RegieFlow");
   pdf.setProducer("RegieFlow");
@@ -176,8 +177,10 @@ async function buildPdf(
     } catch (_) {}
   }
 
-  drawText(ctx.company.name, 18, bold, 28);
-  drawText("Digitale Regiefreigabe", 11, font, 28);
+  drawText(ctx.company.name, 18, bold, 24);
+  if (ctx.company.legal_name && ctx.company.legal_name !== ctx.company.name) drawText(ctx.company.legal_name, 9, font, 14);
+  if (ctx.company.address) drawText(ctx.company.address, 9, font, 16);
+  drawText("Digitale Regiefreigabe", 11, font, 24);
   page.drawLine({ start:{x:left,y:y+5}, end:{x:548,y:y+5}, thickness:1, color:rgb(0.85,0.86,0.88) });
   y -= 12;
 
@@ -211,6 +214,18 @@ async function buildPdf(
   drawText("Freigabe", 12, bold, 20);
   drawText(`Freigegeben am: ${new Date().toLocaleString("de-CH", { timeZone: "Europe/Zurich" })}`);
   drawText("Die oben beschriebene Regiearbeit wurde digital freigegeben.", 10, font, 18);
+  drawText("Freigabeerklärung", 9, bold, 15);
+  const consentWords = pdfSafe(CONSENT_TEXT).split(/\s+/);
+  let consentLine = "";
+  for (const word of consentWords) {
+    const test = consentLine ? consentLine + " " + word : word;
+    if (font.widthOfTextAtSize(test, 8.5) > width) {
+      drawText(consentLine, 8.5, font, 12);
+      consentLine = word;
+    } else consentLine = test;
+  }
+  if (consentLine) drawText(consentLine, 8.5, font, 14);
+  y -= 4;
 
   const sig = signatureMime === "image/png"
     ? await pdf.embedPng(signatureBytes)
@@ -266,6 +281,16 @@ Deno.serve(async (req: Request) => {
     }
     if (!token || token.length < 32) return json({ error: "Ungültiger Freigabelink" }, 400);
 
+    const ip=(req.headers.get("cf-connecting-ip")||req.headers.get("x-forwarded-for")||req.headers.get("x-real-ip")||"unknown").split(",")[0].trim();
+    const ipHash=await sha256Hex("public-approval-ip:"+ip);
+    const tokenRateHash=await sha256Hex("public-approval-token:"+token);
+    const [{data:ipAllowed,error:ipRateError},{data:tokenAllowed,error:tokenRateError}]=await Promise.all([
+      admin.rpc("rf_take_rate_limit",{p_scope:"public_approval_ip",p_key_hash:ipHash,p_limit:180,p_window_seconds:3600}),
+      admin.rpc("rf_take_rate_limit",{p_scope:"public_approval_token",p_key_hash:tokenRateHash,p_limit:90,p_window_seconds:3600})
+    ]);
+    if(ipRateError)throw ipRateError;if(tokenRateError)throw tokenRateError;
+    if(!ipAllowed||!tokenAllowed)return json({error:"Zu viele Zugriffe. Bitte später erneut versuchen.",code:"RATE_LIMITED"},429);
+
     const ctx = await loadApproval(admin, token);
 
     if (req.method === "GET" || body.action === "view") {
@@ -312,7 +337,7 @@ Deno.serve(async (req: Request) => {
 
     const decision = body.action;
     if (!["approve","reject"].includes(decision)) return json({ error: "Ungültige Aktion" }, 400);
-    const signerName = String(body.signerName || ctx.contact.full_name || "").trim();
+    const signerName = String(ctx.contact.full_name || "").trim();
     if (!signerName) return json({ error: "Name ist erforderlich" }, 400);
     if (decision === "approve" && body.consentAccepted !== true) {
       return json({ error: "Bitte bestätigen Sie die Freigabeerklärung." }, 400);
