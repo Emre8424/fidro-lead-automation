@@ -42,4 +42,37 @@ const legal=await fetch(API+"/rf-public-legal",{
 ok("public legal endpoint HTTP 200",legal.status===200,String(legal.status));
 console.log("LEGAL",JSON.stringify(await legal.json()));
 
+const manifest=await fetch(APP+"manifest.webmanifest",{cache:"no-store"});
+ok("manifest HTTP 200",manifest.status===200,String(manifest.status));
+const sw=await fetch(APP+"sw.js",{cache:"no-store"});
+ok("service worker HTTP 200",sw.status===200,String(sw.status));
+
+const robots=await fetch(APP+"robots.txt",{cache:"no-store"});
+ok("robots HTTP 200",robots.status===200,String(robots.status));
+const robotsText=await robots.text();
+ok("development indexing disabled",robotsText.includes("Disallow: /"));
+
+const pushDenied=await fetch(API+"/rf-push",{
+  method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({notificationId:"00000000-0000-0000-0000-000000000000"})
+});
+ok("push private hook enforced",pushDenied.status===403,String(pushDenied.status));
+
+const webhookDenied=await fetch(API+"/rf-stripe-webhook",{
+  method:"POST",
+  headers:{"Content-Type":"application/json"},
+  body:"{}"
+});
+// Before Stripe secrets are installed the endpoint deliberately returns 503;
+// after configuration, an unsigned request must be rejected as 400.
+ok("Stripe webhook unavailable or signature-protected",[400,503].includes(webhookDenied.status),String(webhookDenied.status));
+
+const retired=await Promise.all([
+  fetch(API+"/rf-dev-company-setup",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}),
+  fetch(API+"/rf-app"),
+  fetch(API+"/rf-publish-static")
+]);
+ok("retired endpoints are not anonymous",retired.every(r=>[401,403,410].includes(r.status)),retired.map(r=>r.status).join(","));
+
 console.log("RegieFlow public smoke test complete.");
