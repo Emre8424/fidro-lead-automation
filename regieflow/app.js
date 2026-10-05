@@ -735,7 +735,7 @@ async function notifications(c){
     }
   });
   document.getElementById("read").onclick=async()=>{
-    const z=await sb.from("rf_notifications").update({read_at:new Date().toISOString()}).is("read_at",null);
+    const z=await sb.from("rf_notifications").update({read_at:new Date().toISOString()}).eq("company_id",S.companyId).is("read_at",null);
     if(z.error)return toast(em(z.error));
     S.unread=0;renderShell();await renderTab();
   };
