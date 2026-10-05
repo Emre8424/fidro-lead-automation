@@ -23,8 +23,9 @@ Deno.serve(async(req:Request)=>{
   const url=Deno.env.get("SUPABASE_URL");
   const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const stripe=Deno.env.get("STRIPE_SECRET_KEY");
+  const stripeWebhook=Deno.env.get("STRIPE_WEBHOOK_SECRET");
   if(!url||!service)return json({error:"Server configuration missing"},500);
-  if(!stripe)return json({error:"Zahlungssystem ist noch nicht verbunden.",code:"STRIPE_NOT_CONFIGURED"},503);
+  if(!stripe||!stripeWebhook)return json({error:"Zahlungssystem ist noch nicht vollständig verbunden.",code:"STRIPE_NOT_CONFIGURED"},503);
 
   try{
     const body=await req.json();
@@ -51,17 +52,31 @@ Deno.serve(async(req:Request)=>{
     if(ipRateError)throw ipRateError;if(emailRateError)throw emailRateError;
     if(!ipAllowed||!emailAllowed)return json({error:"Zu viele Registrierungsversuche. Bitte später erneut versuchen.",code:"RATE_LIMITED"},429);
 
-    const {data:legal,error:legalError}=await admin.rpc("rf_public_legal");
+    const [{data:legal,error:legalError},{data:prod,error:prodError},{data:allPlans,error:allPlansError}]=await Promise.all([
+      admin.rpc("rf_public_legal"),
+      admin.rpc("rf_production_readiness"),
+      admin.from("rf_plan_catalog").select("plan,stripe_price_id,stripe_extra_price_id,active").eq("active",true)
+    ]);
     if(legalError)throw legalError;
-    if(!legal?.published)return json({error:"RegieFlow ist noch nicht für öffentliche Registrierungen freigeschaltet.",code:"LEGAL_NOT_PUBLISHED"},503);
+    if(prodError)throw prodError;
+    if(allPlansError)throw allPlansError;
+
+    const productionReady=!!prod?.emailConfirmationReady&&!!prod?.leakedPasswordProtectionReady&&!!prod?.backupRecoveryReady;
+    const priceReady=(allPlans||[]).length===3&&(allPlans||[]).every((p:any)=>p.stripe_price_id&&p.stripe_extra_price_id);
+    if(!legal?.published||!productionReady||!priceReady){
+      return json({
+        error:"RegieFlow ist noch nicht für öffentliche Registrierungen freigeschaltet.",
+        code:"PRODUCTION_NOT_READY"
+      },503);
+    }
     const legalVersionHash=await sha256Hex(String(legal.updatedAt||"")+"|"+String(legal.terms||"")+"|"+String(legal.privacy||""));
 
     const {data:planRow,error:pe}=await admin.from("rf_plan_catalog")
-      .select("plan,label,stripe_price_id,active")
+      .select("plan,label,stripe_price_id,stripe_extra_price_id,active")
       .eq("plan",plan).eq("active",true).maybeSingle();
     if(pe)throw pe;
     if(!planRow)return json({error:"Tarif ist nicht verfügbar."},400);
-    if(!planRow.stripe_price_id)return json({error:"Dieser Tarif ist in Stripe noch nicht konfiguriert.",code:"STRIPE_PRICE_NOT_CONFIGURED"},503);
+    if(!planRow.stripe_price_id||!planRow.stripe_extra_price_id)return json({error:"Dieser Tarif ist in Stripe noch nicht vollständig konfiguriert.",code:"STRIPE_PRICE_NOT_CONFIGURED"},503);
 
     const {data:open,error:oe}=await admin.rpc("rf_signup_find_open",{p_email:email});
     if(oe)throw oe;
