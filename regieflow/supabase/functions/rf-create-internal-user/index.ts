@@ -40,6 +40,25 @@ Deno.serve(async(req:Request)=>{
 
     const admin=createClient(url,service,{auth:{persistSession:false}});
 
+    const {data:billing,error:billingError}=await admin.from("rf_company_billing")
+      .select("plan,subscription_status").eq("company_id",companyId).maybeSingle();
+    if(billingError)throw billingError;
+    if(billing&&billing.plan!=="development"){
+      if(!["active","trialing"].includes(String(billing.subscription_status||""))){
+        return json({error:"Das Firmenabo ist nicht aktiv.",code:"SUBSCRIPTION_INACTIVE"},402);
+      }
+      const {data:plan,error:planError}=await admin.from("rf_plan_catalog")
+        .select("included_internal_profiles,stripe_extra_price_id").eq("plan",billing.plan).eq("active",true).maybeSingle();
+      if(planError)throw planError;
+      if(!plan)return json({error:"Tarif ist nicht aktiv."},409);
+      const {count,error:countError}=await admin.from("rf_memberships")
+        .select("id",{count:"exact",head:true}).eq("company_id",companyId).eq("active",true);
+      if(countError)throw countError;
+      if((count||0)+1>Number(plan.included_internal_profiles||0)&&!plan.stripe_extra_price_id){
+        return json({error:"Zusätzliche Profile sind für diesen Tarif in Stripe noch nicht konfiguriert.",code:"EXTRA_PRICE_NOT_CONFIGURED"},409);
+      }
+    }
+
     if(roleId){
       const {data:role,error:roleError}=await admin.from("rf_roles").select("id").eq("id",roleId).eq("company_id",companyId).maybeSingle();
       if(roleError)throw roleError;
@@ -52,6 +71,7 @@ Deno.serve(async(req:Request)=>{
     let targetUserId=existing as string|null;
     let generatedPassword:string|null=null;
     let existingAccount=!!targetUserId;
+    let createdNewUser=false;
 
     if(!targetUserId){
       generatedPassword=tempPassword();
@@ -64,11 +84,15 @@ Deno.serve(async(req:Request)=>{
       if(createError)throw createError;
       if(!created.user)throw new Error("Benutzer konnte nicht erstellt werden");
       targetUserId=created.user.id;
+      createdNewUser=true;
     }
 
     const {data:already}=await admin.from("rf_memberships")
       .select("id").eq("company_id",companyId).eq("user_id",targetUserId).maybeSingle();
-    if(already)return json({error:"Dieser Benutzer gehört bereits zur Firma"},409);
+    if(already){
+      if(createdNewUser&&targetUserId)await admin.auth.admin.deleteUser(targetUserId);
+      return json({error:"Dieser Benutzer gehört bereits zur Firma"},409);
+    }
 
     const {error:membershipError}=await admin.from("rf_memberships").insert({
       company_id:companyId,
@@ -79,7 +103,10 @@ Deno.serve(async(req:Request)=>{
       created_by:user.id,
       must_change_password:!existingAccount
     });
-    if(membershipError)throw membershipError;
+    if(membershipError){
+      if(createdNewUser&&targetUserId)await admin.auth.admin.deleteUser(targetUserId);
+      throw membershipError;
+    }
 
     await admin.from("rf_audit_log").insert({
       company_id:companyId,
