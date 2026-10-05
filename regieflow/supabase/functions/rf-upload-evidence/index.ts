@@ -8,6 +8,12 @@ const cors={
 };
 const json=(b:unknown,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{...cors,"Content-Type":"application/json"}});
 const sha=async(b:Uint8Array)=>[...new Uint8Array(await crypto.subtle.digest("SHA-256",b))].map(x=>x.toString(16).padStart(2,"0")).join("");
+function matchesMagic(bytes:Uint8Array,mime:string){
+  if(mime==="image/jpeg")return bytes.length>=3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff;
+  if(mime==="image/png")return bytes.length>=8&&bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4e&&bytes[3]===0x47&&bytes[4]===0x0d&&bytes[5]===0x0a&&bytes[6]===0x1a&&bytes[7]===0x0a;
+  if(mime==="application/pdf")return bytes.length>=5&&bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44&&bytes[3]===0x46&&bytes[4]===0x2d;
+  return false;
+}
 
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
@@ -38,8 +44,8 @@ Deno.serve(async(req:Request)=>{
     if(file.size<1||file.size>20*1024*1024)return json({error:"Datei muss zwischen 1 Byte und 20 MB gross sein"},400);
 
     const allowed=kind==="attachment"
-      ?["image/jpeg","image/png","image/webp","application/pdf"]
-      :["image/jpeg","image/png","image/webp"];
+      ?["image/jpeg","image/png","application/pdf"]
+      :["image/jpeg","image/png"];
     if(!allowed.includes(file.type))return json({error:"Dateityp nicht erlaubt"},400);
 
     const {data:regie,error:re}=await admin.from("rf_regies").select("*").eq("id",regieId).single();
@@ -55,9 +61,9 @@ Deno.serve(async(req:Request)=>{
       const {data:can}=await caller.rpc("rf_has_permission",{p_company:regie.company_id,p_permission:"regies.create"});
       if(!can||regie.status!=="draft")return json({error:"Datei kann in diesem Status nicht hinzugefügt werden"},403);
       if(!versionId)return json({error:"Version fehlt"},400);
-      const {data:v,error:ve}=await admin.from("rf_regie_versions").select("id,regie_id,locked_at").eq("id",versionId).single();
+      const {data:v,error:ve}=await admin.from("rf_regie_versions").select("id,regie_id,version_no,locked_at").eq("id",versionId).single();
       if(ve)throw ve;
-      if(v.regie_id!==regieId||v.locked_at)return json({error:"Version ist gesperrt oder gehört nicht zur Regie"},403);
+      if(v.regie_id!==regieId||v.locked_at||v.version_no!==regie.current_version_no)return json({error:"Version ist gesperrt, nicht aktuell oder gehört nicht zur Regie"},403);
     }else if(kind==="after"){
       const {data:canComplete}=await caller.rpc("rf_has_permission",{p_company:regie.company_id,p_permission:"regies.complete"});
       if(!canComplete||!["approved","in_execution","awaiting_rapport"].includes(regie.status))return json({error:"Nachher-Bild kann in diesem Status nicht hinzugefügt werden"},403);
@@ -66,9 +72,9 @@ Deno.serve(async(req:Request)=>{
         if(ve)throw ve;
         versionId=v.id;
       }else{
-        const {data:v,error:ve}=await admin.from("rf_regie_versions").select("id,regie_id").eq("id",versionId).single();
+        const {data:v,error:ve}=await admin.from("rf_regie_versions").select("id,regie_id,version_no").eq("id",versionId).single();
         if(ve)throw ve;
-        if(v.regie_id!==regieId)return json({error:"Version gehört nicht zur Regie"},400);
+        if(v.regie_id!==regieId||v.version_no!==regie.current_version_no)return json({error:"Version gehört nicht zur aktuellen Regie-Version"},400);
       }
     }else{
       const {data:contact,error:ce}=await admin.from("rf_customer_contacts").select("id").eq("company_id",regie.company_id).eq("auth_user_id",user.id).eq("active",true).maybeSingle();
@@ -80,10 +86,11 @@ Deno.serve(async(req:Request)=>{
       uploaderCustomer=contact.id;
     }
 
-    const ext=file.type==="image/jpeg"?"jpg":file.type==="image/png"?"png":file.type==="image/webp"?"webp":"pdf";
+    const ext=file.type==="image/jpeg"?"jpg":file.type==="image/png"?"png":"pdf";
     const folder=kind==="customer_request"?"customer-request":kind==="attachment"?"attachments":kind;
     const path=`${regie.company_id}/${regie.id}/${folder}/${crypto.randomUUID()}.${ext}`;
     const bytes=new Uint8Array(await file.arrayBuffer());
+    if(!matchesMagic(bytes,file.type))return json({error:"Dateiinhalt stimmt nicht mit dem Dateityp überein"},400);
     const digest=await sha(bytes);
 
     const {error:upErr}=await admin.storage.from("rf-private").upload(path,bytes,{contentType:file.type,upsert:false});
@@ -103,6 +110,23 @@ Deno.serve(async(req:Request)=>{
       uploaded_by_customer_contact_id:uploaderCustomer
     }).select("id,storage_path,sha256,byte_size,mime_type").single();
     if(ie)throw ie;
+
+    await admin.from("rf_audit_log").insert({
+      company_id:regie.company_id,
+      project_id:regie.project_id,
+      regie_id:regie.id,
+      actor_user_id:internal?user.id:null,
+      actor_customer_contact_id:uploaderCustomer,
+      event_type:"regie_evidence_uploaded",
+      metadata:{
+        file_id:row.id,
+        version_id:versionId,
+        kind,
+        sha256:row.sha256,
+        byte_size:row.byte_size,
+        mime_type:row.mime_type
+      }
+    });
 
     return json({status:"stored",file:row},201);
   }catch(e){
