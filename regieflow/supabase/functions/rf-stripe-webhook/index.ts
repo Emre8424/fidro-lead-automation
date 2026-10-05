@@ -88,7 +88,7 @@ Deno.serve(async(req:Request)=>{
       const subId=String(obj.id||"");
       if(subId){
         const {data:billing,error:be}=await admin.from("rf_company_billing")
-          .select("company_id,billing_email").eq("stripe_subscription_id",subId).maybeSingle();
+          .select("company_id,billing_email,plan,stripe_price_id").eq("stripe_subscription_id",subId).maybeSingle();
         if(be)throw be;
 
         if(billing?.company_id){
@@ -102,14 +102,16 @@ Deno.serve(async(req:Request)=>{
             planRow=(plans||[])[0]||null;
           }
 
-          if(planRow?.plan){
+          const effectivePlan=planRow?.plan||billing.plan||null;
+          const effectivePrice=planRow?.stripe_price_id||billing.stripe_price_id||null;
+          if(effectivePlan&&effectivePrice){
             const end=obj.current_period_end?new Date(Number(obj.current_period_end)*1000).toISOString():null;
             const {error:ae}=await admin.rpc("rf_apply_subscription_state",{
               p_company_id:billing.company_id,
-              p_plan:planRow.plan,
+              p_plan:effectivePlan,
               p_stripe_customer_id:id(obj.customer),
               p_stripe_subscription_id:subId,
-              p_stripe_price_id:planRow.stripe_price_id,
+              p_stripe_price_id:effectivePrice,
               p_subscription_status:String(obj.status||"unknown"),
               p_current_period_end:end,
               p_cancel_at_period_end:!!obj.cancel_at_period_end,
