@@ -78,6 +78,8 @@ Deno.serve(async(req:Request)=>{
     const body=await req.json(),versionId=String(body.versionId||""),action=String(body.action||"");
     if(!versionId||!["approve","reject"].includes(action))return json({error:"Ungültige Anfrage"},400);
     const c=await load(admin,versionId,user.id),signer=String(c.contact.full_name||"").trim();if(!signer)return json({error:"Name ist erforderlich"},400);
+    const {data:writeEnabled,error:writeError}=await admin.rpc("rf_company_write_enabled",{p_company:c.regie.company_id});if(writeError)throw writeError;
+    if(!writeEnabled)return json({error:"Das Firmenabo ist derzeit im Nur-Lese-Modus.",code:"SUBSCRIPTION_READ_ONLY"},402);
     if(action==="approve"&&body.consentAccepted!==true)return json({error:"Bitte bestätigen Sie die Freigabeerklärung."},400);
     if(action==="reject"){
       const {error}=await admin.rpc("rf_finalize_customer_decision_v2",{p_version_id:c.version.id,p_customer_contact_id:c.contact.id,p_signer_user_id:user.id,p_signer_name:signer,p_decision:"rejected",p_signature_storage_path:null,p_signature_sha256:null,p_document_storage_path:null,p_document_file_name:null,p_document_sha256:null,p_document_byte_size:null,p_auth_method:"account",p_ip_address:req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),p_user_agent:req.headers.get("user-agent"),p_consent_text:null,p_consent_version:null});if(error)throw error;return json({status:"rejected"});
