@@ -16,13 +16,14 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;p
 pre{white-space:pre-wrap;background:#f6f7f9;padding:9px;border-radius:8px;font-size:11px}.draft pre{max-height:240px;overflow:auto}
 dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backdrop{background:#0008}.modal{padding:16px}label{font-size:12px;font-weight:700;display:block;margin:8px 0 4px}
 #toast{position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:10px 13px;border-radius:9px;display:none;z-index:10}
+.chat-layout{display:grid;grid-template-columns:minmax(240px,320px) 1fr;gap:12px}.chat-list{max-height:68vh;overflow:auto;border:1px solid #e1e3e6;border-radius:10px;background:#f8f9fb}.chat-item{padding:10px;border-bottom:1px solid #e7e9ed;cursor:pointer}.chat-item:last-child{border-bottom:0}.chat-item:hover,.chat-item.active{background:#eef1f5}.chat-thread{min-height:360px;max-height:68vh;overflow:auto;background:#f6f7f9;border:1px solid #e1e3e6;border-radius:10px;padding:12px}.msg{max-width:78%;padding:9px 11px;border-radius:12px;margin:7px 0;white-space:pre-wrap;word-break:break-word}.msg.out{margin-left:auto;background:#e4f4ea}.msg.in{margin-right:auto;background:#fff;border:1px solid #e1e3e6}.msgmeta{font-size:10px;color:#687083;margin-top:4px}.chat-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:10px}.lead-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}.lead-tools input{min-width:220px}@media(max-width:800px){.chat-layout{grid-template-columns:1fr}.chat-list{max-height:260px}.chat-thread{max-height:58vh}}
 </style></head>
 <body>
 <header><div><b>FIDRO Lead Automation</b><div class="muted" style="color:#bbb">V1 · Produktions-Gate</div></div>
 <div class="row"><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Zugriffsschlüssel"><button class="secondary" onclick="saveToken()">Speichern</button><button class="secondary" onclick="rotateOperatorKey()">Schlüssel rotieren</button><button class="secondary" onclick="clearToken()">Abmelden</button><span id="pauseBadge" class="badge">-</span></div></header>
 <main>
 <div class="nav">
-<button onclick="showTab('dash')">Dashboard</button><button onclick="showTab('import')">Import</button><button onclick="showTab('leads')">Leads</button><button onclick="showTab('drafts')">Mail-Entwürfe</button><button onclick="showTab('audit')">Audit</button>
+<button onclick="showTab('dash')">Dashboard</button><button onclick="showTab('import')">Import</button><button onclick="showTab('leads')">Leads</button><button onclick="showTab('chats')">Chats</button><button onclick="showTab('drafts')">Mail-Entwürfe</button><button onclick="showTab('audit')">Audit</button>
 <button class="secondary" onclick="refreshAll()">Aktualisieren</button>
 </div>
 <section id="dash" class="tab">
@@ -34,7 +35,8 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 <section id="import" class="tab hide"><div class="card"><h3>Copy/Paste Import</h3><p class="muted">Arilla-Liste, Arilla-Detailansicht oder Gewinnspiel-Export. Die Kampagne wird pro Lead automatisch aus der Arilla-Zeile erkannt. Vorschau zuerst prüfen.</p>
 <textarea id="raw" placeholder="Hier direkt aus Arilla oder dem Export einfügen..."></textarea>
 <div class="actions" style="margin-top:9px"><button onclick="previewImport()">Vorschau</button><button class="good" onclick="doImport()">Importieren</button></div><div id="preview"></div></div></section>
-<section id="leads" class="tab hide"><div class="card"><h3>Leads</h3><p class="muted">Bei bestehender WhatsApp-Einwilligung kannst du einzelne Leads oder eine ganze Kampagne freigeben.</p><div id="bulkOptInBar" class="row" style="margin:10px 0"></div><div class="scroll"><table><thead><tr><th>Name</th><th>Telefon</th><th>Phase</th><th>Quelle</th><th>WA-Einwilligung</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="leadRows"></tbody></table></div></div></section>
+<section id="leads" class="tab hide"><div class="card"><h3>Leads</h3><p class="muted">Bei bestehender WhatsApp-Einwilligung kannst du einzelne Leads oder eine ganze Kampagne freigeben.</p><div id="bulkOptInBar" class="row" style="margin:10px 0"></div><div class="lead-tools"><input id="leadSearch" placeholder="Leads durchsuchen…" oninput="renderLeadRows()"><select id="leadSort" onchange="renderLeadRows()"><option value="newest">Neueste zuerst</option><option value="oldest">Älteste zuerst</option><option value="name_asc">Name A–Z</option><option value="name_desc">Name Z–A</option><option value="campaign">Kampagne A–Z</option><option value="phase">Phase</option><option value="status">Status</option><option value="optin">Opt-in zuerst</option></select><span id="leadCount" class="muted"></span></div><div class="scroll"><table><thead><tr><th>Name</th><th>Telefon</th><th>Phase</th><th>Quelle</th><th>WA-Einwilligung</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="leadRows"></tbody></table></div></div></section>
+<section id="chats" class="tab hide"><div class="card"><div class="chat-head"><div><h3 style="margin:0">WhatsApp Chats</h3><p class="muted">Nachrichtenverlauf, Zustellung, Lesestatus und aktueller Dialogschritt. Neue Textnachrichten werden ab jetzt gespeichert; sensible Kennungen werden automatisch ausgeblendet.</p></div><button class="secondary" onclick="loadChats()">Aktualisieren</button></div><div id="chatStats" class="muted" style="margin-bottom:8px"></div><div class="chat-layout"><div id="chatList" class="chat-list"><div class="muted" style="padding:10px">Noch keine Chats.</div></div><div><div id="chatHeader" class="muted" style="margin-bottom:8px">Chat auswählen</div><div id="chatThread" class="chat-thread"><div class="muted">Links einen Chat auswählen.</div></div></div></div></div></section>
 <section id="drafts" class="tab hide"><div class="card"><h3>Mail-Entwürfe</h3><p class="muted">Pro bestätigtem Termin entstehen genau zwei Entwürfe: intern an leads@fidro.ch und für den Kunden. „In Gmail öffnen“ öffnet nur den Entwurf. Nach dem tatsächlichen Versand bitte „Als gesendet markieren“ drücken; danach erscheint der Status dauerhaft grün.</p><div id="draftList"></div></div></section>
 <section id="audit" class="tab hide"><div class="card"><h3>Audit</h3><p class="muted">Letzte System- und Operatorereignisse. Dient der Nachvollziehbarkeit von Opt-ins, Opt-outs, Versand, Handoffs und Terminbestätigungen.</p><div class="scroll"><table><thead><tr><th>Zeit</th><th>Ereignis</th><th>Akteur</th><th>Lead</th><th>Details</th></tr></thead><tbody id="auditRows"></tbody></table></div></div></section>
 </main>
@@ -60,11 +62,11 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 <div class="actions"><button class="good" onclick="startProductionTest()">Testnachricht senden</button><button class="secondary" onclick="document.getElementById('prodTest').close()">Abbrechen</button></div></div></dialog>
 <div id="toast"></div>
 <script>
-var SUPA="https://khgjhuvfddhpkhgbgwhg.supabase.co/functions/v1", API=SUPA+"/fidro-api", SEND=SUPA+"/whatsapp-send", DASH=null, READY=null, LEADS=[];
+var SUPA="https://khgjhuvfddhpkhgbgwhg.supabase.co/functions/v1", API=SUPA+"/fidro-api", SEND=SUPA+"/whatsapp-send", DASH=null, READY=null, LEADS=[], CHATS=[], ACTIVE_CHAT_ID=null, CHAT_REFRESH_TIMER=null;
 document.getElementById("token").value=localStorage.getItem("fidro_token")||"";
 function tok(){return localStorage.getItem("fidro_token")||document.getElementById("token").value.trim()}
 function saveToken(){localStorage.setItem("fidro_token",document.getElementById("token").value.trim());toast("Gespeichert");refreshAll()}
-function clearToken(){localStorage.removeItem("fidro_token");document.getElementById("token").value="";DASH=null;READY=null;LEADS=[];document.getElementById("pauseBadge").textContent="-";toast("Abgemeldet")}
+function clearToken(){localStorage.removeItem("fidro_token");document.getElementById("token").value="";DASH=null;READY=null;LEADS=[];CHATS=[];ACTIVE_CHAT_ID=null;if(CHAT_REFRESH_TIMER){clearInterval(CHAT_REFRESH_TIMER);CHAT_REFRESH_TIMER=null}document.getElementById("pauseBadge").textContent="-";toast("Abgemeldet")}
 async function rotateOperatorKey(){
   var current=tok();
   if(!current)return toast("Zuerst aktuellen Zugriffsschlüssel eingeben");
@@ -96,8 +98,8 @@ async function rotateOperatorKey(){
 function toast(m){var t=document.getElementById("toast");t.textContent=m;t.style.display="block";setTimeout(function(){t.style.display="none"},3200)}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 async function call(path,opt){opt=opt||{};var r=await fetch(API+path,Object.assign({},opt,{headers:Object.assign({},opt.headers||{},{"content-type":"application/json","x-admin-token":tok()})}));var j=await r.json().catch(function(){return{error:"Ungültige Antwort"}});if(!r.ok)throw new Error(j.error||"Fehler");return j}
-function showTab(id){document.querySelectorAll(".tab").forEach(function(x){x.classList.add("hide")});document.getElementById(id).classList.remove("hide");if(id==="leads")loadLeads();if(id==="drafts")loadDrafts();if(id==="audit")loadAudit()}
-async function refreshAll(){try{await loadDash();if(!document.getElementById("leads").classList.contains("hide"))await loadLeads();if(!document.getElementById("drafts").classList.contains("hide"))await loadDrafts();if(!document.getElementById("audit").classList.contains("hide"))await loadAudit()}catch(e){toast(e.message==="unauthorized"?"Zugriffsschlüssel fehlt/falsch":e.message)}}
+function showTab(id){if(CHAT_REFRESH_TIMER){clearInterval(CHAT_REFRESH_TIMER);CHAT_REFRESH_TIMER=null}document.querySelectorAll(".tab").forEach(function(x){x.classList.add("hide")});document.getElementById(id).classList.remove("hide");if(id==="leads")loadLeads();if(id==="chats"){loadChats();CHAT_REFRESH_TIMER=setInterval(function(){if(!document.getElementById("chats").classList.contains("hide"))loadChats(true)},15000)}if(id==="drafts")loadDrafts();if(id==="audit")loadAudit()}
+async function refreshAll(){try{await loadDash();if(!document.getElementById("leads").classList.contains("hide"))await loadLeads();if(!document.getElementById("chats").classList.contains("hide"))await loadChats(true);if(!document.getElementById("drafts").classList.contains("hide"))await loadDrafts();if(!document.getElementById("audit").classList.contains("hide"))await loadAudit()}catch(e){toast(e.message==="unauthorized"?"Zugriffsschlüssel fehlt/falsch":e.message)}}
 async function loadReadiness(){READY=await call("/readiness");var map={whatsapp_access_token:"Meta Access Token",meta_graph_verified:"Meta-Zugriff verifiziert",whatsapp_phone_number_id:"WhatsApp Phone Number ID",whatsapp_app_secret:"Webhook App Secret",whatsapp_verify_token:"Webhook Verify Token",production_phone:"Produktions-Telefonnummer",production_phone_graph_verified:"Produktionsnummer bei Meta verifiziert",meta_app_published:"Meta-App veröffentlicht",webhook_subscribed:"Webhook für Produktionskonto",payment_method_ready:"Zahlungsmethode",first_contact_template_approved:"Erstkontakt-Template genehmigt",whatsapp_opt_in_gate:"WhatsApp Opt-in-Schutz",business_use_authorized:"FIDRO-Nutzung freigegeben",operator_key_rotated:"Zugriffsschlüssel rotiert",production_e2e_test_passed:"Produktions-E2E-Test bestanden"};var parts=Object.keys(READY.checks||{}).map(function(k){var ok=!!READY.checks[k];return'<span class="badge '+(ok?"green":"red")+'" style="margin:2px">'+(ok?"✓ ":"✕ ")+esc(map[k]||k)+'</span>'});var ts=READY.template&&READY.template.meta_review_status?READY.template.meta_review_status:(READY.template&&READY.template.status?READY.template.status:"-");document.getElementById("readiness").innerHTML='<div style="margin-bottom:6px"><b>'+(READY.ready?"Produktionsbereit":"Noch nicht produktionsbereit")+'</b> · Meta-Template: '+esc(ts)+'</div>'+parts.join(" ");var ab=document.getElementById("bizAuthBtn");if(ab)ab.classList.toggle("hide",!!(READY.checks&&READY.checks.business_use_authorized));var tb=document.getElementById("prodTestBtn");if(tb)tb.classList.toggle("hide",!(READY.test_ready&&!READY.checks.production_e2e_test_passed));var ft=READY.followup_template||{};var fs=ft.meta_review_status||ft.status||"-";var fe=!!(DASH&&DASH.settings&&DASH.settings.followups_enabled);document.getElementById("followupStatus").innerHTML="Template: <b>"+esc(fs)+"</b> · Modul: <b>"+(fe?"AKTIV":"AUS")+"</b>";var fb=document.getElementById("followupBtn");fb.textContent=fe?"Nachfass-Nachricht deaktivieren":"Nachfass-Nachricht aktivieren";fb.className=fe?"danger":"secondary";return READY}
 async function loadDash(){DASH=await call("/dashboard");var c=DASH.counts||{};var items=[["Leads",c.total||0],["WA-Opt-in",c.whatsapp_eligible||0],["Einwilligung fehlt",c.consent_missing||0],["Sperrliste",c.suppressed||0],["Bereit",c.ready||0],["Wartet",c.awaiting_reply||0],["Handoff",c.human_handoff||0],["Gebucht",c.booked||0],["Opt-out",c.opted_out||0],["Ausgeschlossen",c.excluded||0]];document.getElementById("stats").innerHTML=items.map(function(x){return'<div class="stat"><span class="muted">'+x[0]+'</span><b>'+x[1]+'</b></div>'}).join("");var paused=!!DASH.settings.automation_paused;document.getElementById("pauseBadge").textContent=paused?"PAUSIERT":"AKTIV";document.getElementById("pauseBadge").className="badge "+(paused?"red":"green");var b=document.getElementById("pauseBtn");b.textContent=paused?"Automation aktivieren":"ALLE AUTOMATIONEN PAUSIEREN";b.className=paused?"good":"danger";var u=DASH.upcoming||[];document.getElementById("upcoming").innerHTML=u.length?u.map(function(a){return"<div><b>"+new Date(a.starts_at).toLocaleString("de-CH")+"</b> · "+esc(a.location_label)+" · "+esc(a.customer_email)+"</div>"}).join(""):"Keine Termine.";await loadReadiness()}
 async function toggleFollowups(){
@@ -172,28 +174,52 @@ async function loadLeads(){
   try{
     LEADS=await call("/leads");
     renderBulkOptIn();
-    document.getElementById("leadRows").innerHTML=LEADS.map(function(l){
-      var excluded=l.phase==="nicht_brauchbar";
-      var revoked=!!l.opt_out_at||l.automation_status==="opted_out";
-      var optin=l.lawful_acquisition_confirmed===true&&l.whatsapp_opt_in_confirmed===true&&!revoked;
-      var adult=true;if(l.birth_date){var bd=new Date(l.birth_date+"T00:00:00Z"),now=new Date(),cut=new Date(Date.UTC(now.getUTCFullYear()-18,now.getUTCMonth(),now.getUTCDate()));adult=!isNaN(bd.getTime())&&bd<=cut}
-      var ready=!excluded&&adult&&optin&&l.automation_status==="ready";
-      var consentBadge=revoked
-        ? '<span class="badge red">WIDERRUFEN</span>'
-        : optin
-          ? '<span class="badge green">✓ OPT-IN</span>'
-          : '<span class="badge red">FEHLT</span>';
-      var actions="";
-      if(ready) actions+='<button class="small good" onclick="startWa(\''+l.id+'\')">WA starten</button>';
-      if(!excluded&&adult&&!revoked&&!optin) actions+='<button class="small warn" onclick="quickOptIn(\''+l.id+'\')">Opt-in</button>';
-      if(!excluded){
-        actions+='<button class="small" onclick="openBook(\''+l.id+'\')">Termin</button>';
-        actions+='<button class="small secondary" onclick="statusLead(\''+l.id+'\',\'human_handoff\')">Übernehmen</button>';
-        if(!revoked) actions+='<button class="small secondary" onclick="statusLead(\''+l.id+'\',\'opted_out\')">Opt-out</button>';
-      }
-      return "<tr><td><b>"+esc(l.display_name||[l.first_name,l.last_name].filter(Boolean).join(" "))+"</b>"+(!adult?'<div><span class="badge red">U18 · kein WA-Erstkontakt</span></div>':"")+"<div class=muted>"+esc((l.postal_code||"")+" "+(l.city||""))+"</div></td><td>"+esc(l.phone_e164)+"</td><td><span class='badge "+(excluded?"red":"")+"'>"+esc(phase(l.phase))+"</span></td><td>"+esc(l.source_description||l.campaign||"")+"</td><td>"+consentBadge+(optin&&l.whatsapp_opt_in_source?'<div class="muted">'+esc(l.whatsapp_opt_in_source)+'</div>':"")+"</td><td><span class=badge>"+esc(l.automation_status)+"</span></td><td><div class=actions>"+actions+"</div></td></tr>";
-    }).join("");
+    renderLeadRows();
   }catch(e){toast(e.message)}
+}
+function leadName(l){return String(l.display_name||[l.first_name,l.last_name].filter(Boolean).join(" ")||"").trim()}
+function leadHasOptIn(l){return l.lawful_acquisition_confirmed===true&&l.whatsapp_opt_in_confirmed===true&&!l.opt_out_at&&l.automation_status!=="opted_out"}
+function leadIsAdult(l){if(!l.birth_date)return true;var bd=new Date(l.birth_date+"T00:00:00Z"),now=new Date(),cut=new Date(Date.UTC(now.getUTCFullYear()-18,now.getUTCMonth(),now.getUTCDate()));return !isNaN(bd.getTime())&&bd<=cut}
+function renderLeadRows(){
+  var q=(document.getElementById("leadSearch")?.value||"").trim().toLowerCase();
+  var sort=document.getElementById("leadSort")?.value||"newest";
+  var rows=LEADS.slice().filter(function(l){
+    if(!q)return true;
+    return [leadName(l),l.phone_e164,l.source_description,l.campaign,l.phase,l.phase_raw,l.automation_status,l.postal_code,l.city].some(function(v){return String(v||"").toLowerCase().includes(q)})
+  });
+  rows.sort(function(a,b){
+    if(sort==="oldest")return new Date(a.created_at||0)-new Date(b.created_at||0);
+    if(sort==="name_asc")return leadName(a).localeCompare(leadName(b),"de");
+    if(sort==="name_desc")return leadName(b).localeCompare(leadName(a),"de");
+    if(sort==="campaign")return String(a.campaign||a.source_description||"").localeCompare(String(b.campaign||b.source_description||""),"de")||leadName(a).localeCompare(leadName(b),"de");
+    if(sort==="phase")return String(a.phase||"").localeCompare(String(b.phase||""),"de")||leadName(a).localeCompare(leadName(b),"de");
+    if(sort==="status")return String(a.automation_status||"").localeCompare(String(b.automation_status||""),"de")||leadName(a).localeCompare(leadName(b),"de");
+    if(sort==="optin")return Number(leadHasOptIn(b))-Number(leadHasOptIn(a))||leadName(a).localeCompare(leadName(b),"de");
+    return new Date(b.created_at||0)-new Date(a.created_at||0);
+  });
+  var count=document.getElementById("leadCount");if(count)count.textContent=rows.length+" von "+LEADS.length+" Leads";
+  document.getElementById("leadRows").innerHTML=rows.map(function(l){
+    var excluded=l.phase==="nicht_brauchbar"||l.automation_status==="excluded";
+    var revoked=!!l.opt_out_at||l.automation_status==="opted_out";
+    var optin=leadHasOptIn(l);
+    var adult=leadIsAdult(l);
+    var ready=!excluded&&adult&&optin&&l.automation_status==="ready";
+    var consentBadge=revoked
+      ? '<span class="badge red">WIDERRUFEN</span>'
+      : optin
+        ? '<span class="badge green">✓ OPT-IN</span>'
+        : '<span class="badge red">FEHLT</span>';
+    var actions="";
+    if(ready) actions+='<button class="small good" onclick="startWa(\''+l.id+'\')">WA starten</button>';
+    if(!excluded&&adult&&!revoked&&!optin) actions+='<button class="small warn" onclick="quickOptIn(\''+l.id+'\')">Opt-in</button>';
+    if(!excluded&&adult&&revoked) actions+='<button class="small warn" onclick="reOptIn(\''+l.id+'\')">Re-Opt-in</button>';
+    if(!excluded){
+      actions+='<button class="small" onclick="openBook(\''+l.id+'\')">Termin</button>';
+      actions+='<button class="small secondary" onclick="statusLead(\''+l.id+'\',\'human_handoff\')">Übernehmen</button>';
+      if(!revoked) actions+='<button class="small secondary" onclick="statusLead(\''+l.id+'\',\'opted_out\')">Opt-out</button>';
+    }
+    return "<tr><td><b>"+esc(leadName(l))+"</b>"+(!adult?'<div><span class="badge red">U18 · kein WA-Erstkontakt</span></div>':"")+"<div class=muted>"+esc((l.postal_code||"")+" "+(l.city||""))+"</div></td><td>"+esc(l.phone_e164)+"</td><td><span class='badge "+(excluded?"red":"")+"'>"+esc(phase(l.phase))+"</span></td><td>"+esc(l.source_description||l.campaign||"")+"</td><td>"+consentBadge+(optin&&l.whatsapp_opt_in_source?'<div class="muted">'+esc(l.whatsapp_opt_in_source)+'</div>':"")+"</td><td><span class=badge>"+esc(l.automation_status)+"</span></td><td><div class=actions>"+actions+"</div></td></tr>";
+  }).join("");
 }
 function renderBulkOptIn(){
   var bar=document.getElementById("bulkOptInBar");
@@ -287,11 +313,66 @@ async function quickOptIn(id){
     toast(m);
   }
 }
+async function reOptIn(id){
+  var l=LEADS.find(function(x){return x.id===id});
+  if(!l)return;
+  var campaign=(l.campaign||l.source_description||"").trim();
+  if(!confirm("Re-Opt-in für "+leadName(l)+" bestätigen?\n\nNur fortfahren, wenn die Person nach dem früheren Opt-out erneut ausdrücklich WhatsApp-Kontakt durch fidro erlaubt hat. Die Sperre wird danach aufgehoben."))return;
+  try{
+    await call("/re-opt-in",{method:"POST",body:JSON.stringify({lead_id:id})});
+    toast("Re-Opt-in bestätigt · "+campaign);
+    await loadLeads();
+    await loadDash();
+  }catch(e){
+    var m={lead_under_18:"U18 · kein WhatsApp-Erstkontakt",campaign_required:"Kampagne fehlt",lead_stopped:"Lead ist ausgeschlossen"}[e.message]||e.message;
+    toast(m);
+  }
+}
 async function statusLead(id,status){try{await call("/lead-status",{method:"POST",body:JSON.stringify({id:id,status:status})});await loadLeads();await loadDash()}catch(e){toast(e.message)}}
 function openBook(id){var l=LEADS.find(function(x){return x.id===id});document.getElementById("leadId").value=id;document.getElementById("email").value=l&&l.email?l.email:"";document.getElementById("date").value="";document.getElementById("addr").value="";document.getElementById("book").showModal()}
 function addrVis(){document.getElementById("addrWrap").classList.toggle("hide",document.getElementById("kind").value!=="customer")}
 async function saveAppointment(){var d=document.getElementById("date").value,t=document.getElementById("time").value;if(!d||!t)return toast("Datum/Uhrzeit fehlt");var local=new Date(d+"T"+t+":00");var body={lead_id:document.getElementById("leadId").value,starts_at:local.toISOString(),appointment_type:document.getElementById("kind").value,customer_email:document.getElementById("email").value,customer_address:document.getElementById("addr").value,duration_minutes:Number(document.getElementById("duration").value)};try{await call("/appointment",{method:"POST",body:JSON.stringify(body)});document.getElementById("book").close();toast("Termin gesetzt · zwei Mail-Entwürfe erstellt");await loadDash();showTab("drafts")}catch(e){toast(e.message)}}
 async function markDraftSent(id){if(!confirm("Bestätigen, dass diese E-Mail tatsächlich in Gmail gesendet wurde?"))return;try{await call("/draft-mark-sent",{method:"POST",body:JSON.stringify({id:id})});toast("Versand bestätigt");await loadDrafts()}catch(e){toast(e.message)}}
+function chatStateLabel(s){return({new:"Neu",first_contact_sent:"Erstkontakt gesendet",await_permission:"Wartet auf Antwort",await_interest:"Wartet auf Interesse",await_relationship_interest:"Wartet auf Antwort zur Betreuung",await_type:"Wartet auf Terminart",await_datetime:"Wartet auf Datum/Uhrzeit",await_address:"Wartet auf Adresse",await_email:"Wartet auf E-Mail",await_confirmation:"Wartet auf Bestätigung",booked:"Gebucht",human_handoff:"Manuelle Übernahme",stopped:"Gestoppt"})[s]||s||"-"}
+async function loadChats(silent){
+  try{
+    CHATS=await call("/chats");
+    var stats=document.getElementById("chatStats");
+    if(stats){var sent=0,read=0,inbound=0;CHATS.forEach(function(c){(c.messages||[]).forEach(function(m){if(m.direction==="outbound")sent++;else inbound++;if(m.read_at)read++})});stats.textContent=CHATS.length+" Chats · "+sent+" gesendet · "+read+" gelesen · "+inbound+" Antworten";}
+    renderChatList();
+    if(ACTIVE_CHAT_ID&&CHATS.some(function(c){return c.lead&&c.lead.id===ACTIVE_CHAT_ID}))selectChat(ACTIVE_CHAT_ID,true);
+    else if(CHATS.length)selectChat(CHATS[0].lead.id,true);
+  }catch(e){if(!silent)toast(e.message)}
+}
+function renderChatList(){
+  var el=document.getElementById("chatList");if(!el)return;
+  if(!CHATS.length){el.innerHTML='<div class="muted" style="padding:10px">Noch keine WhatsApp-Chats.</div>';return}
+  el.innerHTML=CHATS.map(function(c){
+    var l=c.lead||{},msgs=c.messages||[],last=msgs[msgs.length-1]||{};
+    var snippet=String(last.body|| (last.template_name?"Vorlage: "+last.template_name:"Inhalt nicht gespeichert")).replace(/\s+/g," ").slice(0,70);
+    var active=ACTIVE_CHAT_ID===l.id?" active":"";
+    return '<div class="chat-item'+active+'" onclick="selectChat(\''+l.id+'\')"><b>'+esc(leadName(l))+'</b><div class="muted">'+esc(l.campaign||l.source_description||"")+' · '+esc(chatStateLabel(c.conversation&&c.conversation.state))+'</div><div style="font-size:11px;margin-top:4px">'+esc(snippet)+'</div><div class="muted">'+(c.last_message_at?esc(new Date(c.last_message_at).toLocaleString("de-CH")):"")+'</div></div>';
+  }).join("");
+}
+function selectChat(id,skipList){
+  ACTIVE_CHAT_ID=id;
+  var c=CHATS.find(function(x){return x.lead&&x.lead.id===id});if(!c)return;
+  if(!skipList)renderChatList();
+  var l=c.lead||{},conv=c.conversation||{};
+  document.getElementById("chatHeader").innerHTML='<b>'+esc(leadName(l))+'</b> · '+esc(l.campaign||l.source_description||"")+' · <span class="badge">'+esc(chatStateLabel(conv.state))+'</span> · <span class="badge">'+esc(l.automation_status||"")+'</span>';
+  var msgs=c.messages||[];
+  var thread=document.getElementById("chatThread");
+  thread.innerHTML=msgs.length?msgs.map(function(m){
+    var outbound=m.direction==="outbound";
+    var body=m.body;
+    if(!body)body=m.template_name?"[Ältere Vorlagennachricht – Inhalt wurde damals noch nicht gespeichert]":"[Inhalt wurde damals nicht gespeichert]";
+    var status="";
+    if(outbound){status=m.read_at?"✓✓ gelesen":m.delivered_at?"✓✓ zugestellt":"✓ gesendet"}
+    var when=m.sent_at?new Date(m.sent_at).toLocaleString("de-CH"):"";
+    return '<div class="msg '+(outbound?"out":"in")+'">'+esc(body)+'<div class="msgmeta">'+esc(when)+(status?" · "+esc(status):"")+'</div></div>';
+  }).join(""):'<div class="muted">Noch keine Nachrichten.</div>';
+  thread.scrollTop=thread.scrollHeight;
+}
 async function loadDrafts(){try{var ds=await call("/drafts");document.getElementById("draftList").innerHTML=ds.length?ds.map(function(d){var gmail="https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(d.recipient)+"&su="+encodeURIComponent(d.subject)+"&body="+encodeURIComponent(d.body_text);var sent=!!d.sent_manually_at;var sentTime=sent?new Date(d.sent_manually_at).toLocaleString("de-CH"):"";return'<div class="card draft"><div class="row" style="justify-content:space-between"><div><span class="badge '+(d.draft_type==="customer_confirmation"?"green":"")+'">'+esc(d.draft_type)+'</span> <span class="badge '+(sent?"green":"")+'">'+(sent?"GESENDET":"ENTWURF")+'</span></div>'+(sent?'<span class="muted">Gesendet: '+esc(sentTime)+'</span>':'')+'</div><h4>'+esc(d.recipient)+'</h4><b>'+esc(d.subject)+'</b><pre>'+esc(d.body_text)+'</pre><div class="actions"><a target="_blank" class="btn" href="'+gmail+'">In Gmail öffnen</a>'+(!sent?'<button class="good" onclick="markDraftSent(\''+d.id+'\')">Als gesendet markieren</button>':'<span class="badge green">✓ Versand bestätigt</span>')+'</div></div>'}).join(""):"Noch keine Entwürfe."}catch(e){toast(e.message)}}
 async function loadAudit(){try{var rows=await call("/audit");document.getElementById("auditRows").innerHTML=rows.length?rows.map(function(a){var details=a.details?JSON.stringify(a.details):"";return"<tr><td>"+esc(new Date(a.created_at).toLocaleString("de-CH"))+"</td><td><span class=badge>"+esc(a.event_type)+"</span></td><td>"+esc(a.actor||"")+"</td><td class=muted>"+esc(a.lead_id?String(a.lead_id).slice(0,8):"")+"</td><td><code style='font-size:11px'>"+esc(details)+"</code></td></tr>"}).join(""):"<tr><td colspan=5 class=muted>Noch keine Audit-Ereignisse.</td></tr>"}catch(e){toast(e.message)}}
 refreshAll();
