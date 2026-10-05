@@ -329,7 +329,16 @@ async function invitePage(token){
   app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Kostenloses Kundenkonto</div></div></div><div class="card"><h2>Einladung annehmen</h2><p class="muted">Kundenkonten sind kostenlos. Du kannst Aufträge erstellen, Regien freigeben und dein Archiv jederzeit öffnen.</p>'+(session?'<div class="notice">Du bist bereits angemeldet.</div><button id="claim" class="btn primary" style="width:100%;margin-top:12px">Mit diesem Konto verknüpfen</button>':'<div class="field"><input id="ie" class="input" type="email" placeholder="E-Mail"></div><div class="field"><input id="ip" class="input" type="password" placeholder="Passwort, mind. 10 Zeichen"></div><button id="newacc" class="btn primary" style="width:100%">Kostenloses Konto erstellen</button><hr style="border:0;border-top:1px solid var(--line);margin:20px 0"><div class="field"><input id="ee" class="input" type="email" placeholder="Bestehende E-Mail"></div><div class="field"><input id="ep" class="input" type="password" placeholder="Passwort"></div><button id="existing" class="btn" style="width:100%">Anmelden & verknüpfen</button>')+'</div></div>';
   if(session)document.getElementById("claim").onclick=async()=>{try{await invoke("rf-claim-customer-invite",{token:token});S.session=session;history.replaceState({},"",APP);await context()}catch(e){toast(em(e))}};
   else{
-    document.getElementById("newacc").onclick=async()=>{try{const email=document.getElementById("ie").value.trim(),password=document.getElementById("ip").value;await invoke("rf-customer-signup",{token:token,email:email,password:password});const r=await sb.auth.signInWithPassword({email:email,password:password});if(r.error)throw r.error;S.session=r.data.session;history.replaceState({},"",APP);await context()}catch(e){toast(em(e))}};
+    document.getElementById("newacc").onclick=async()=>{try{
+      const email=document.getElementById("ie").value.trim(),password=document.getElementById("ip").value;
+      const result=await invoke("rf-customer-signup",{token:token,email:email,password:password});
+      if(result?.verificationRequired){
+        app.innerHTML='<div class="auth"><div class="brand"><div class="mark">RF</div><div><strong>RegieFlow</strong><div class="small muted">Kundenkonto bestätigen</div></div></div><div class="card"><div class="notice ok"><strong>Bestätigungs-E-Mail gesendet.</strong><br>Öffne den Link in der E-Mail. Danach kommst du zu dieser Einladung zurück und kannst das Konto verknüpfen.</div><div class="small muted" style="margin-top:12px">E-Mail: '+esc(email)+'</div></div></div>';
+        return;
+      }
+      const r=await sb.auth.signInWithPassword({email:email,password:password});if(r.error)throw r.error;
+      S.session=r.data.session;history.replaceState({},"",APP);await context()
+    }catch(e){toast(em(e))}};
     document.getElementById("existing").onclick=async()=>{try{const r=await sb.auth.signInWithPassword({email:document.getElementById("ee").value.trim(),password:document.getElementById("ep").value});if(r.error)throw r.error;S.session=r.data.session;await invoke("rf-claim-customer-invite",{token:token});history.replaceState({},"",APP);await context()}catch(e){toast(em(e))}}
   }
 }
