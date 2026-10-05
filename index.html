@@ -31,15 +31,8 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 <div class="card"><h3>Nachfass-Nachricht</h3><p class="muted">Optional: maximal eine WhatsApp-Nachfassnachricht nach 48 Stunden, nur wenn keine Antwort eingegangen ist. Bei jeder Antwort oder jedem Opt-out wird sie automatisch storniert.</p><div id="followupStatus" class="muted">-</div><button id="followupBtn" class="secondary" onclick="toggleFollowups()">-</button></div>
 <div class="card"><h3>Nächste Termine</h3><div id="upcoming" class="muted">-</div></div>
 </section>
-<section id="import" class="tab hide"><div class="card"><h3>Copy/Paste Import</h3><p class="muted">Arilla-Liste, Arilla-Detailansicht oder Gewinnspiel-Export. Vorschau zuerst prüfen. Der Import löst keinen Versand aus; ein WhatsApp-Erstkontakt ist erst nach dokumentierter WhatsApp-Einwilligung möglich.</p>
+<section id="import" class="tab hide"><div class="card"><h3>Copy/Paste Import</h3><p class="muted">Arilla-Liste, Arilla-Detailansicht oder Gewinnspiel-Export. Die Kampagne wird pro Lead automatisch aus der Arilla-Zeile erkannt. Vorschau zuerst prüfen.</p>
 <textarea id="raw" placeholder="Hier direkt aus Arilla oder dem Export einfügen..."></textarea>
-<div style="margin-top:10px"><label style="display:flex;gap:8px;align-items:flex-start;font-weight:600"><input id="batchConsent" type="checkbox" onchange="batchConsentVis()"> Für diesen gesamten Import liegt derselbe nachweisbare FIDRO-WhatsApp-Opt-in vor</label></div>
-<div id="batchConsentFields" class="hide">
-<p class="muted">Nur verwenden, wenn jeder Datensatz aus genau diesem Formular/Consent-Stand stammt und der Arilla-Quellzeitpunkt dem Zeitpunkt der Einwilligung entspricht. Fehlt ein Quellzeitpunkt, bleibt der Lead automatisch ohne WhatsApp-Freigabe.</p>
-<label>Nachweis / Formular / Kampagne *</label><input id="batchConsentSource" style="width:100%" placeholder="z.B. Gewinnspielformular Lakers 2026 – Version 01.09.2026">
-<label>Exakter WhatsApp-Einwilligungswortlaut *</label><textarea id="batchConsentWording" style="min-height:120px" placeholder="Exakten Wortlaut einfügen..."></textarea>
-<label style="display:flex;gap:8px;align-items:flex-start;font-weight:600"><input id="batchConsentTimestamp" type="checkbox"> Ich bestätige, dass der importierte Arilla-Quellzeitpunkt dem Zeitpunkt dieser Einwilligung entspricht</label>
-</div>
 <div class="actions" style="margin-top:9px"><button onclick="previewImport()">Vorschau</button><button class="good" onclick="doImport()">Importieren</button></div><div id="preview"></div></div></section>
 <section id="leads" class="tab hide"><div class="card"><h3>Leads</h3><p class="muted">WhatsApp wird nur freigegeben, wenn eine nachweisbare Einwilligung für Nachrichten von FIDRO über WhatsApp hinterlegt ist.</p><div class="scroll"><table><thead><tr><th>Name</th><th>Telefon</th><th>Phase</th><th>Quelle</th><th>WA-Einwilligung</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="leadRows"></tbody></table></div></div></section>
 <section id="drafts" class="tab hide"><div class="card"><h3>Mail-Entwürfe</h3><p class="muted">Pro bestätigtem Termin entstehen genau zwei Entwürfe: intern an leads@fidro.ch und für den Kunden. „In Gmail öffnen“ öffnet nur den Entwurf. Nach dem tatsächlichen Versand bitte „Als gesendet markieren“ drücken; danach erscheint der Status dauerhaft grün.</p><div id="draftList"></div></div></section>
@@ -147,35 +140,40 @@ async function startProductionTest(){
 }
 async function saveBusinessAuthorization(){var by=document.getElementById("bizAuthBy").value.trim(),ref=document.getElementById("bizAuthRef").value.trim();if(by.length<3||ref.length<5)return toast("Name/Funktion und Nachweis sind Pflicht");if(!confirm("Bestätigst du, dass diese FIDRO-Freigabe tatsächlich vorliegt?"))return;try{await call("/business-authorization",{method:"POST",body:JSON.stringify({authorized_by:by,reference:ref})});document.getElementById("bizAuth").close();toast("FIDRO-Freigabe dokumentiert");await loadDash()}catch(e){toast(e.message)}}
 async function togglePause(){try{if(DASH.settings.automation_paused){var r=await loadReadiness();if(!r.ready){toast("Noch nicht produktionsbereit – siehe rote Punkte.");return}}await call("/pause",{method:"POST",body:JSON.stringify({paused:!DASH.settings.automation_paused})});await loadDash()}catch(e){toast(e.message==="production_not_ready"?"Noch nicht produktionsbereit – siehe rote Punkte.":e.message)}}
-function batchConsentVis(){document.getElementById("batchConsentFields").classList.toggle("hide",!document.getElementById("batchConsent").checked)}
-function importConsentEvidence(){
-  if(!document.getElementById("batchConsent").checked)return{};
-  return{
-    applies_to_all:true,
-    source:document.getElementById("batchConsentSource").value.trim(),
-    wording:document.getElementById("batchConsentWording").value.trim(),
-    source_timestamp_is_consent_time:document.getElementById("batchConsentTimestamp").checked===true
-  }
 }
-async function previewImport(){var text=document.getElementById("raw").value;if(!text.trim())return toast("Text fehlt");try{var r=await call("/parse-import",{method:"POST",body:JSON.stringify({text:text})});document.getElementById("preview").innerHTML='<div class="grid" style="margin-top:10px"><div class="stat"><span class="muted">Format</span><b style="font-size:14px">'+esc(r.format)+'</b></div><div class="stat"><span class="muted">Erkannt</span><b>'+r.leads.length+'</b></div><div class="stat"><span class="muted">Warnungen</span><b>'+r.warnings.length+'</b></div></div><pre>'+esc(JSON.stringify(r.leads.slice(0,20),null,2))+'</pre>'}catch(e){toast(e.message)}}
-async function doImport(){
-  var text=document.getElementById("raw").value;if(!text.trim())return toast("Text fehlt");
-  var evidence=importConsentEvidence();
-  if(evidence.applies_to_all){
-    if(evidence.source.length<3||evidence.wording.length<20)return toast("Nachweis und exakter Einwilligungswortlaut fehlen");
-    if(!/whatsapp/i.test(evidence.wording)||!/fidro/i.test(evidence.wording))return toast("Der Einwilligungswortlaut muss WhatsApp und FIDRO ausdrücklich nennen");
-    if(!evidence.source_timestamp_is_consent_time)return toast("Bestätigung zum Arilla-Quellzeitpunkt fehlt");
-    if(!confirm("Bestätigst du, dass der angegebene WhatsApp-Opt-in tatsächlich für JEDEN Datensatz dieses Imports galt?"))return;
-  }else if(!confirm("Jetzt importieren? Ohne dokumentierten WhatsApp-Opt-in wird kein Erstkontakt freigegeben."))return;
+async function previewImport(){
+  var text=document.getElementById("raw").value;
+  if(!text.trim())return toast("Text fehlt");
   try{
-    var r=await call("/import",{method:"POST",body:JSON.stringify({text:text,consent_evidence:evidence})});
+    var r=await call("/parse-import",{method:"POST",body:JSON.stringify({text:text})});
+    var campaigns={};
+    (r.leads||[]).forEach(function(l){
+      var k=(l.campaign||l.source_description||"Ohne Kampagne").trim();
+      campaigns[k]=(campaigns[k]||0)+1;
+    });
+    var campaignHtml=Object.keys(campaigns).sort().map(function(k){
+      return '<div class="stat"><span class="muted">Kampagne</span><b style="font-size:14px">'+esc(k)+'</b><span class="muted">'+campaigns[k]+' Lead'+(campaigns[k]===1?'':'s')+'</span></div>';
+    }).join("");
+    document.getElementById("preview").innerHTML=
+      '<div class="grid" style="margin-top:10px">'+
+      '<div class="stat"><span class="muted">Format</span><b style="font-size:14px">'+esc(r.format)+'</b></div>'+
+      '<div class="stat"><span class="muted">Erkannt</span><b>'+r.leads.length+'</b></div>'+
+      '<div class="stat"><span class="muted">Warnungen</span><b>'+r.warnings.length+'</b></div>'+
+      '</div>'+
+      (campaignHtml?'<h4 style="margin:14px 0 8px">Erkannte Kampagnen</h4><div class="grid">'+campaignHtml+'</div>':'')+
+      '<pre>'+esc(JSON.stringify(r.leads.slice(0,20),null,2))+'</pre>';
+  }catch(e){toast(e.message)}
+}
+async function doImport(){
+  var text=document.getElementById("raw").value;
+  if(!text.trim())return toast("Text fehlt");
+  if(!confirm("Jetzt importieren? Kampagne und Phase werden automatisch pro Lead erkannt."))return;
+  try{
+    var r=await call("/import",{method:"POST",body:JSON.stringify({text:text})});
     document.getElementById("preview").innerHTML="<pre>"+esc(JSON.stringify(r,null,2))+"</pre>";
-    toast("Import abgeschlossen · WhatsApp-Opt-ins übernommen: "+(r.consent_applied||0));
+    toast("Import abgeschlossen · "+r.imported+" Leads verarbeitet");
     await loadDash();
-  }catch(e){
-    var m={batch_consent_source_required:"Consent-Nachweis fehlt",batch_consent_wording_invalid:"Einwilligungswortlaut ist nicht ausreichend",batch_consent_timestamp_basis_required:"Bestätigung zum Quellzeitpunkt fehlt"}[e.message]||e.message;
-    toast(m);
-  }
+  }catch(e){toast(e.message)}
 }
 function phase(p){return({neu:"Neu",nicht_erreicht:"Nicht erreicht",in_bearbeitung:"In Bearbeitung",geschlossen:"Geschlossen",nicht_brauchbar:"Nicht brauchbar",unbekannt:"Unbekannt"})[p]||p}
 async function loadLeads(){
