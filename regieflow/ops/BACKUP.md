@@ -6,6 +6,7 @@ It is intentionally **not scheduled or enabled automatically** because productio
 
 ## What the backup contains
 
+- full Postgres schema snapshot (`schema.dump`) for functions, policies, triggers and migrations
 - RegieFlow application data from `public.rf_*`
 - RegieFlow private server tables from `regieflow_private.*`
 - Supabase Auth user metadata export
@@ -13,7 +14,7 @@ It is intentionally **not scheduled or enabled automatically** because productio
 - all objects from `rf-branding`
 - a manifest with timestamps/counts/checksums
 
-The output is encrypted before the plaintext working directory is removed.
+The output is encrypted before the plaintext working directory is removed. The helper also decrypts the encrypted stream in-memory and verifies that the tar archive can be listed before reporting success.
 
 ## Required environment variables
 
@@ -59,7 +60,7 @@ Do **not** store unencrypted production backups as artifacts of this public GitH
 The migration chain/source-controlled schema remains the schema authority. Restore order:
 
 1. create a clean RegieFlow Supabase project;
-2. apply RegieFlow migrations/extensions;
+2. restore `schema.dump` (or replay the source-controlled migration chain when available) and verify extensions/functions/policies;
 3. deploy Edge Functions and private secrets;
 4. restore RegieFlow database data;
 5. recreate Auth users as supported by Supabase (password resets may be required because password material is not exported by the Admin API);
