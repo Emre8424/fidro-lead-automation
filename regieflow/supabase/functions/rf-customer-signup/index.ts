@@ -15,8 +15,8 @@ async function sha256Hex(v:string){
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
   if(req.method!=="POST")return json({error:"Method not allowed"},405);
-  const url=Deno.env.get("SUPABASE_URL"),service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if(!url||!service)return json({error:"Server configuration missing"},500);
+  const url=Deno.env.get("SUPABASE_URL"),anon=Deno.env.get("SUPABASE_ANON_KEY"),service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if(!url||!anon||!service)return json({error:"Server configuration missing"},500);
   try{
     const body=await req.json();
     const token=String(body.token||"");
@@ -51,12 +51,31 @@ Deno.serve(async(req:Request)=>{
     if(le)throw le;
     if(existing)return json({error:"Diese E-Mail hat bereits ein Konto. Bitte anmelden und die Einladung dort verknüpfen.",code:"LOGIN_AND_CLAIM"},409);
 
-    const {data:created,error:createError}=await admin.auth.admin.createUser({
-      email,password,email_confirm:true,user_metadata:{regieflow_customer:true}
+    const publicClient=createClient(url,anon,{auth:{persistSession:false}});
+    const redirectTo="https://regieflow.pages.dev/?invite="+encodeURIComponent(token);
+    const {data:created,error:createError}=await publicClient.auth.signUp({
+      email,
+      password,
+      options:{
+        data:{regieflow_customer:true},
+        emailRedirectTo:redirectTo
+      }
     });
     if(createError)throw createError;
     if(!created.user)throw new Error("Konto konnte nicht erstellt werden");
 
+    // With production email confirmation enabled, the invite remains unused until
+    // the user returns with a verified session and rf-claim-customer-invite links it.
+    if(!created.user.email_confirmed_at||!created.session){
+      return json({
+        status:"verification_required",
+        verificationRequired:true,
+        email
+      },202);
+    }
+
+    // Development configurations may confirm immediately. Preserve the same
+    // identity checks and complete the invite atomically in that case.
     try{
       const {error:ue}=await admin.from("rf_customer_contacts").update({
         auth_user_id:created.user.id,
@@ -71,7 +90,7 @@ Deno.serve(async(req:Request)=>{
         company_id:invite.company_id,
         actor_customer_contact_id:contact.id,
         event_type:"customer_account_created",
-        metadata:{auth_user_id:created.user.id}
+        metadata:{auth_user_id:created.user.id,email_verified:true}
       });
     }catch(e){
       await admin.auth.admin.deleteUser(created.user.id);
