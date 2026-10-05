@@ -26,6 +26,15 @@ Deno.serve(async(req:Request)=>{
 
     const admin=createClient(url,service,{auth:{persistSession:false}});
     const tokenHash=await sha256Hex(token);
+    const ip=(req.headers.get("cf-connecting-ip")||req.headers.get("x-forwarded-for")||"unknown").split(",")[0].trim();
+    const ipHash=await sha256Hex("customer-signup-ip:"+ip);
+    const [{data:ipAllowed,error:ipRateError},{data:tokenAllowed,error:tokenRateError}]=await Promise.all([
+      admin.rpc("rf_take_rate_limit",{p_scope:"customer_signup_ip",p_key_hash:ipHash,p_limit:30,p_window_seconds:3600}),
+      admin.rpc("rf_take_rate_limit",{p_scope:"customer_signup_token",p_key_hash:tokenHash,p_limit:12,p_window_seconds:3600})
+    ]);
+    if(ipRateError)throw ipRateError;if(tokenRateError)throw tokenRateError;
+    if(!ipAllowed||!tokenAllowed)return json({error:"Zu viele Versuche. Bitte später erneut versuchen.",code:"RATE_LIMITED"},429);
+
     const {data:invite,error:ie}=await admin.from("rf_customer_invites").select("*").eq("token_hash",tokenHash).maybeSingle();
     if(ie)throw ie;
     if(!invite)return json({error:"Einladung nicht gefunden"},404);
