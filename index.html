@@ -28,7 +28,7 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 </div>
 <section id="dash" class="tab">
 <div id="stats" class="grid"></div>
-<div class="card"><h3>Automation</h3><p class="muted">Die Automation kann erst aktiviert werden, wenn WhatsApp-Produktion, FIDRO-Freigabe, Meta-Template und Produktions-Test vollständig bereit sind. Im aktiven Betrieb prüft der Auto-Erstkontakt alle 15 Minuten und verarbeitet pro Lauf maximal 3 vollständig berechtigte Leads; ohne dokumentiertes WhatsApp-Opt-in wird nichts gesendet.</p><div id="readiness" class="muted" style="margin:10px 0">Prüfe Produktionsbereitschaft…</div><div class="actions"><button id="pauseBtn" onclick="togglePause()">-</button><button id="bizAuthBtn" class="secondary hide" onclick="document.getElementById('bizAuth').showModal()">FIDRO-Freigabe erfassen</button><button id="prodTestBtn" class="secondary hide" onclick="document.getElementById('prodTest').showModal()">Produktions-Test starten</button></div></div>
+<div class="card"><h3>Automation</h3><p class="muted">Die Automation kann erst aktiviert werden, wenn WhatsApp-Produktion, FIDRO-Freigabe, Meta-Template und Produktions-Test vollständig bereit sind. Im aktiven Betrieb prüft der Auto-Erstkontakt alle 5 Minuten und verarbeitet pro Lauf maximal 3 vollständig berechtigte Leads; ohne dokumentiertes WhatsApp-Opt-in wird nichts gesendet.</p><div id="readiness" class="muted" style="margin:10px 0">Prüfe Produktionsbereitschaft…</div><div class="actions"><button id="pauseBtn" onclick="togglePause()">-</button><button id="bizAuthBtn" class="secondary hide" onclick="document.getElementById('bizAuth').showModal()">FIDRO-Freigabe erfassen</button><button id="prodTestBtn" class="secondary hide" onclick="document.getElementById('prodTest').showModal()">Produktions-Test starten</button></div></div>
 <div class="card"><h3>Nachfass-Nachricht</h3><p class="muted">Optional: maximal eine WhatsApp-Nachfassnachricht nach 48 Stunden, nur wenn keine Antwort eingegangen ist. Bei jeder Antwort oder jedem Opt-out wird sie automatisch storniert.</p><div id="followupStatus" class="muted">-</div><button id="followupBtn" class="secondary" onclick="toggleFollowups()">-</button></div>
 <div class="card"><h3>Nächste Termine</h3><div id="upcoming" class="muted">-</div></div>
 </section>
@@ -273,7 +273,11 @@ async function bulkOptIn(){
       !l.opt_out_at &&
       !(l.lawful_acquisition_confirmed===true&&l.whatsapp_opt_in_confirmed===true);
   }).length;
-  if(!confirm("Alle zulässigen Leads der Kampagne „"+campaign+"“ als WhatsApp-Opt-in bestätigen?\n\nCa. "+count+" Leads. U18, Opt-outs, Sperrliste und ausgeschlossene Leads bleiben automatisch gesperrt.\n\nBitte nur fortfahren, wenn die WhatsApp-Einwilligung für diese Kampagne tatsächlich vorliegt."))return;
+  if(!confirm("Alle zulässigen Leads der Kampagne „"+campaign+"“ als WhatsApp-Opt-in bestätigen?\
+\
+Ca. "+count+" Leads. U18, Opt-outs, Sperrliste und ausgeschlossene Leads bleiben automatisch gesperrt.\
+\
+Bitte nur fortfahren, wenn die WhatsApp-Einwilligung für diese Kampagne tatsächlich vorliegt."))return;
   try{
     var r=await call("/campaign-opt-in-bulk",{method:"POST",body:JSON.stringify({campaign:campaign})});
     toast("Bulk-Opt-in: "+r.confirmed+" freigegeben");
@@ -336,7 +340,9 @@ async function reOptIn(id){
   var l=LEADS.find(function(x){return x.id===id});
   if(!l)return;
   var campaign=(l.campaign||l.source_description||"").trim();
-  if(!confirm("Re-Opt-in für "+leadName(l)+" bestätigen?\n\nNur fortfahren, wenn die Person nach dem früheren Opt-out erneut ausdrücklich WhatsApp-Kontakt durch fidro erlaubt hat. Die Sperre wird danach aufgehoben."))return;
+  if(!confirm("Re-Opt-in für "+leadName(l)+" bestätigen?\
+\
+Nur fortfahren, wenn die Person nach dem früheren Opt-out erneut ausdrücklich WhatsApp-Kontakt durch fidro erlaubt hat. Die Sperre wird danach aufgehoben."))return;
   try{
     await call("/re-opt-in",{method:"POST",body:JSON.stringify({lead_id:id})});
     toast("Re-Opt-in bestätigt · "+campaign);
