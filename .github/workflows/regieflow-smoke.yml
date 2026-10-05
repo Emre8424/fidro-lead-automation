@@ -1,0 +1,32 @@
+name: RegieFlow Smoke Test
+
+on:
+  push:
+    branches:
+      - regieflow-web-preview
+    paths:
+      - "regieflow/**"
+      - ".github/workflows/regieflow-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout preview branch
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Wait for Cloudflare Pages deployment
+        run: sleep 30
+
+      - name: Run public smoke checks
+        run: node regieflow/ops/smoke-test.mjs
