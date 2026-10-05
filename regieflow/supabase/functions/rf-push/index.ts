@@ -43,9 +43,15 @@ Deno.serve(async(req:Request)=>{
     if(ne)throw ne;
 
     let query=admin.from("rf_push_subscriptions").select("*");
-    if(n.recipient_user_id)query=query.eq("user_id",n.recipient_user_id);
-    else if(n.recipient_customer_contact_id)query=query.eq("customer_contact_id",n.recipient_customer_contact_id);
-    else return json({sent:0});
+    if(n.recipient_user_id){
+      query=query.eq("user_id",n.recipient_user_id);
+    }else if(n.recipient_customer_contact_id){
+      const {data:contact,error:ce}=await admin.from("rf_customer_contacts")
+        .select("auth_user_id").eq("id",n.recipient_customer_contact_id).maybeSingle();
+      if(ce)throw ce;
+      if(contact?.auth_user_id)query=query.eq("user_id",contact.auth_user_id);
+      else query=query.eq("customer_contact_id",n.recipient_customer_contact_id);
+    }else return json({sent:0});
 
     const {data:subs,error:se}=await query;
     if(se)throw se;
