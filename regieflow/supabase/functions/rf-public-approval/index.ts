@@ -337,6 +337,9 @@ Deno.serve(async (req: Request) => {
 
     const decision = body.action;
     if (!["approve","reject"].includes(decision)) return json({ error: "Ungültige Aktion" }, 400);
+    const {data:writeEnabled,error:writeError}=await admin.rpc("rf_company_write_enabled",{p_company:ctx.regie.company_id});
+    if(writeError)throw writeError;
+    if(!writeEnabled)return json({error:"Das Firmenabo ist derzeit im Nur-Lese-Modus.",code:"SUBSCRIPTION_READ_ONLY"},402);
     const signerName = String(ctx.contact.full_name || "").trim();
     if (!signerName) return json({ error: "Name ist erforderlich" }, 400);
     if (decision === "approve" && body.consentAccepted !== true) {
