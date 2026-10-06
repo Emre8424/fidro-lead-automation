@@ -36,7 +36,7 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 <textarea id="raw" placeholder="Hier direkt aus Arilla oder dem Export einfügen..."></textarea>
 <div class="actions" style="margin-top:9px"><button onclick="previewImport()">Vorschau</button><button class="good" onclick="doImport()">Importieren</button></div><div id="preview"></div></div></section>
 <section id="leads" class="tab hide"><div class="card"><h3>Leads</h3><p class="muted">Bei bestehender WhatsApp-Einwilligung kannst du einzelne Leads oder eine ganze Kampagne freigeben.</p><div id="bulkOptInBar" class="row" style="margin:10px 0"></div><div class="lead-tools"><input id="leadSearch" placeholder="Leads durchsuchen…" oninput="renderLeadRows()"><select id="leadSort" onchange="renderLeadRows()"><option value="newest">Neueste zuerst</option><option value="oldest">Älteste zuerst</option><option value="name_asc">Name A–Z</option><option value="name_desc">Name Z–A</option><option value="campaign">Kampagne A–Z</option><option value="phase">Phase</option><option value="status">Status</option><option value="optin">Opt-in zuerst</option></select><span id="leadActiveFilter" class="badge hide"></span><button id="leadClearFilter" class="secondary hide" onclick="clearLeadFilter()">Filter löschen</button><span id="leadCount" class="muted"></span></div><div class="scroll"><table><thead><tr><th>Name</th><th>Telefon</th><th>Phase</th><th>Quelle</th><th>WA-Einwilligung</th><th>Status</th><th>Aktionen</th></tr></thead><tbody id="leadRows"></tbody></table></div></div></section>
-<section id="chats" class="tab hide"><div class="card"><div class="chat-head"><div><h3 style="margin:0">WhatsApp Chats</h3><p class="muted">Nachrichtenverlauf, Zustellung, Lesestatus und aktueller Dialogschritt. Neue Textnachrichten, Erstkontakt-Vorlagen und Reaktionen werden gespeichert. Der Grund einer manuellen Übernahme steht direkt im Chat; sensible Kennungen werden ausgeblendet.</p></div><button class="secondary" onclick="loadChats()">Aktualisieren</button></div><div id="chatStats" class="muted" style="margin-bottom:8px"></div><div class="chat-layout"><div id="chatList" class="chat-list"><div class="muted" style="padding:10px">Noch keine Chats.</div></div><div><div id="chatHeader" class="muted" style="margin-bottom:8px">Chat auswählen</div><div id="chatThread" class="chat-thread"><div class="muted">Links einen Chat auswählen.</div></div></div></div></div></section>
+<section id="chats" class="tab hide"><div class="card"><div class="chat-head"><div><h3 style="margin:0">WhatsApp Chats</h3><p class="muted">Nachrichtenverlauf, Zustellung, Lesestatus und aktueller Dialogschritt. Neue Textnachrichten, Erstkontakt-Vorlagen und Reaktionen werden gespeichert. Der Grund einer manuellen Übernahme steht direkt im Chat; sensible Kennungen werden ausgeblendet.</p></div><button class="secondary" onclick="loadChats()">Aktualisieren</button></div><label>Ansicht <select id="chatView" onchange="changeChatView()"><option value="active">Offene Chats</option><option value="archive">Archiv · Absagen und beendete Chats</option><option value="all">Alle Chats</option></select></label><p class="muted">Absagen und beendete Chats werden automatisch archiviert. Die Verläufe bleiben zur späteren Auswertung erhalten. Das Archivieren löst keine Nachrichten aus.</p><div id="chatStats" class="muted" style="margin-bottom:8px"></div><div class="chat-layout"><div id="chatList" class="chat-list"><div class="muted" style="padding:10px">Noch keine Chats.</div></div><div><div id="chatHeader" class="muted" style="margin-bottom:8px">Chat auswählen</div><div id="chatThread" class="chat-thread"><div class="muted">Links einen Chat auswählen.</div></div></div></div></div></section>
 <section id="drafts" class="tab hide"><div class="card"><h3>Mail-Entwürfe</h3><p class="muted">Pro bestätigtem Termin entstehen genau zwei Entwürfe: intern an leads@fidro.ch und für den Kunden. „In Gmail öffnen“ öffnet nur den Entwurf. Nach dem tatsächlichen Versand bitte „Als gesendet markieren“ drücken; danach erscheint der Status dauerhaft grün.</p><div id="draftList"></div></div></section>
 <section id="audit" class="tab hide"><div class="card"><h3>Audit</h3><p class="muted">Letzte System- und Operatorereignisse. Dient der Nachvollziehbarkeit von Opt-ins, Opt-outs, Versand, Handoffs und Terminbestätigungen.</p><div class="scroll"><table><thead><tr><th>Zeit</th><th>Ereignis</th><th>Akteur</th><th>Lead</th><th>Details</th></tr></thead><tbody id="auditRows"></tbody></table></div></div></section>
 </main>
@@ -361,6 +361,7 @@ async function markDraftSent(id){if(!confirm("Bestätigen, dass diese E-Mail tat
 function chatStateLabel(s){return({new:"Neu",first_contact_sent:"Erstkontakt gesendet",await_permission:"Wartet auf Antwort",await_interest:"Wartet auf Interesse",await_advisor_interest:"Wartet auf Wunsch nach Zweitmeinung",await_relationship_interest:"Wartet auf Antwort zur Betreuung",await_type:"Wartet auf Terminart",await_datetime:"Wartet auf Datum/Uhrzeit",await_address:"Wartet auf Adresse",await_email:"Wartet auf E-Mail",await_confirmation:"Wartet auf Bestätigung",booked:"Gebucht",human_handoff:"Manuelle Übernahme",stopped:"Gestoppt"})[s]||s||"-"}
 async function openLeadChat(id){
   ACTIVE_CHAT_ID=id;
+  document.getElementById('chatView').value='all';
   showTab('chats');
 }
 function chatMessageText(m){
@@ -374,20 +375,23 @@ function chatMessageText(m){
   var type=m.metadata&&m.metadata.type;
   return type&&type!=='text'?'[Nachrichtentyp: '+type+' – Inhalt nicht gespeichert]':'[Nachrichteninhalt wurde nicht gespeichert]';
 }
+function visibleChats(){var view=document.getElementById('chatView').value;return CHATS.filter(function(c){return view==='all'||(view==='archive'?c.archived:!c.archived)})}
+function changeChatView(){ACTIVE_CHAT_ID=null;renderChatList();var rows=visibleChats();if(rows.length)selectChat(rows[0].lead.id);else{document.getElementById('chatHeader').textContent='Kein Chat ausgewählt';document.getElementById('chatThread').textContent='Keine Chats in dieser Ansicht.'}}
 async function loadChats(silent){
   try{
     CHATS=await call("/chats");
     var stats=document.getElementById("chatStats");
-    if(stats){var sent=0,read=0,inbound=0;CHATS.forEach(function(c){(c.messages||[]).forEach(function(m){if(m.direction==="outbound")sent++;else inbound++;if(m.read_at)read++})});stats.textContent=CHATS.length+" Chats · "+sent+" gesendet · "+read+" gelesen · "+inbound+" Antworten";}
+    if(stats){var sent=0,read=0,inbound=0;CHATS.forEach(function(c){(c.messages||[]).forEach(function(m){if(m.direction==="outbound")sent++;else inbound++;if(m.read_at)read++})});stats.textContent=CHATS.length+" Chats · "+CHATS.filter(function(c){return c.archived}).length+" archiviert · "+sent+" gesendet · "+read+" gelesen · "+inbound+" Antworten";}
     renderChatList();
-    if(ACTIVE_CHAT_ID&&CHATS.some(function(c){return c.lead&&c.lead.id===ACTIVE_CHAT_ID}))selectChat(ACTIVE_CHAT_ID,true);
-    else if(CHATS.length)selectChat(CHATS[0].lead.id,true);
+    if(ACTIVE_CHAT_ID&&visibleChats().some(function(c){return c.lead&&c.lead.id===ACTIVE_CHAT_ID}))selectChat(ACTIVE_CHAT_ID,true);
+    else changeChatView();
   }catch(e){if(!silent)toast(e.message)}
 }
 function renderChatList(){
   var el=document.getElementById("chatList");if(!el)return;
-  if(!CHATS.length){el.innerHTML='<div class="muted" style="padding:10px">Noch keine WhatsApp-Chats.</div>';return}
-  el.innerHTML=CHATS.map(function(c){
+  var rows=visibleChats();
+  if(!rows.length){el.innerHTML='<div class="muted" style="padding:10px">Noch keine WhatsApp-Chats.</div>';return}
+  el.innerHTML=rows.map(function(c){
     var l=c.lead||{},msgs=c.messages||[],last=msgs[msgs.length-1]||{};
     var snippet=String(chatMessageText(last)).replace(/\s+/g," ").slice(0,70);
     var active=ACTIVE_CHAT_ID===l.id?" active":"";
@@ -400,6 +404,7 @@ function selectChat(id,skipList){
   if(!skipList)renderChatList();
   var l=c.lead||{},conv=c.conversation||{};
   document.getElementById("chatHeader").innerHTML='<b>'+esc(leadName(l))+'</b> · '+esc(l.campaign||l.source_description||"")+' · <span class="badge">'+esc(chatStateLabel(conv.state))+'</span> · <span class="badge">'+esc(l.automation_status||"")+'</span>';
+  if(c.archived)document.getElementById("chatHeader").innerHTML+='<div class="muted">Archiviert · '+esc(({customer_opt_out:'Opt-out',under_18:'Unter 18',conversation_stopped:'Gespräch beendet'})[c.archive_reason]||c.archive_reason)+'</div>';
   if(l.human_handoff_reason)document.getElementById("chatHeader").innerHTML+='<div style="margin-top:8px;padding:9px;background:#fff3d6;border-radius:8px"><b>Grund für manuelle Übernahme:</b> '+esc(l.human_handoff_reason)+'</div>';
   var msgs=c.messages||[];
   var thread=document.getElementById("chatThread");
