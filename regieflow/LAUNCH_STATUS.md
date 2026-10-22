@@ -45,9 +45,11 @@ Last updated: 2026-10-22
 
 Protected QA selftest `rf-qa-selftest` uses temporary real Auth users and production paths.
 
-Latest proven run: `86837d3a`
+Latest proven runs: `86837d3a` (direct-to-customer) and `e85d2e35` (office-review)
 
 Passed:
+- Office-review workflow: passed end-to-end
+- Direct-to-customer workflow: passed end-to-end
 1. temporary internal/customer Auth users
 2. real login
 3. project/customer access
@@ -78,34 +80,16 @@ Passed:
 
 ## External launch gates still required
 
-These are deliberately NOT bypassed in code:
+All remaining blockers require provider credentials, platform settings, operator identity or a real device:
 
 1. **Stripe live configuration**
-   - Set Stripe secret + webhook secret in Supabase Edge Function secrets
-   - Create base + extra-seat Price IDs for Starter/Team/Business
-   - Configure webhook to `rf-stripe-webhook`
-   - Complete one real Stripe test checkout and billing portal test
-
-2. **Legal operator identity**
-   - Add final operator legal name, address and contact email
-   - Review prepared Swiss draft Impressum/Datenschutz/AGB
-   - Publish legal configuration only after review
-
-3. **Auth production settings**
-   - Enable and verify email confirmation
-   - Configure production SMTP and test delivery
-   - Enable leaked-password protection
-   - Mark production readiness flags only after verification
-
-4. **Backup/recovery activation**
-   - Configure off-site encrypted backup credentials / destination or move production to paid managed backups
-   - Run one restore drill on a non-production Supabase project
-   - Mark backup recovery ready only after integrity passes
-
-5. **Push delivery**
-   - Grant browser notification permission on a real device
-   - Create a real Push subscription
-   - Verify one live notification delivery and deep-link
+2. **Legal operator identity + final legal review**
+3. **Supabase email confirmation + production SMTP**
+4. **Supabase leaked-password protection**
+5. **Backup destination/secrets + restore drill**
+6. **Real browser Push delivery**
+7. **Move RegieFlow source to its own private GitHub repository**
+8. **Production gate turns green only after the above readiness flags are verified**
 
 ## Current product gate
 
