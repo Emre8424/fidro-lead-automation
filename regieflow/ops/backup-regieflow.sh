@@ -26,7 +26,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[1/5] Exporting database schema and RegieFlow rows..."
+echo "[1/6] Exporting database schema and RegieFlow rows..."
 # Schema-only snapshot is intentionally broader than rf_* so functions, triggers,
 # policies, extensions and migration history needed for a disaster rebuild are captured.
 pg_dump "$REGIEFLOW_DATABASE_URL"   --format=custom   --no-owner   --no-acl   --schema-only   --file="$WORK/schema.dump"
