@@ -18,7 +18,8 @@ Deno.serve(async(req:Request)=>{
   const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const stripe=Deno.env.get("STRIPE_SECRET_KEY");
   const auth=req.headers.get("Authorization");
-  if(!url||!anon||!service||!auth)return json({error:"Server configuration missing"},500);
+  if(!url||!anon||!service)return json({error:"Server configuration missing"},500);
+  if(!auth)return json({error:"Nicht angemeldet"},401);
   if(!stripe)return json({error:"Zahlungssystem ist noch nicht verbunden.",code:"STRIPE_NOT_CONFIGURED"},503);
 
   const caller=createClient(url,anon,{global:{headers:{Authorization:auth}},auth:{persistSession:false}});
