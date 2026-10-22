@@ -162,6 +162,27 @@ async function upload(opt){
   if(!res.ok||data&&data.error)throw new Error(typeof data?.error==="string"?data.error:"Datei konnte nicht gespeichert werden");
   return data.file.storage_path;
 }
+async function uploadBranding(file){
+  const session=(await sb.auth.getSession()).data.session;
+  if(!session)throw new Error("Nicht angemeldet");
+  const fd=new FormData();
+  fd.append("companyId",S.companyId);
+  fd.append("file",file,file.name||"logo");
+  let res;
+  try{
+    res=await fetch(SUPABASE_URL+"/functions/v1/rf-upload-branding",{
+      method:"POST",
+      headers:{apikey:KEY,Authorization:"Bearer "+session.access_token},
+      body:fd
+    });
+  }catch(e){
+    throw new Error("Logo konnte nicht zum RegieFlow-Server übertragen werden: "+em(e));
+  }
+  const raw=await res.text();
+  let data=null;try{data=raw?JSON.parse(raw):null}catch{data=raw}
+  if(!res.ok||data&&data.error)throw new Error(typeof data?.error==="string"?data.error:"Logo konnte nicht gespeichert werden");
+  return data.logoPath;
+}
 function sig(id){const c=document.getElementById(id),x=c.getContext("2d"),d=devicePixelRatio||1,r=c.getBoundingClientRect();c.width=r.width*d;c.height=r.height*d;x.scale(d,d);x.lineWidth=2;x.lineCap="round";let down=false,ok=false;const pt=e=>{const a=c.getBoundingClientRect();return[e.clientX-a.left,e.clientY-a.top]};c.onpointerdown=e=>{down=true;c.setPointerCapture(e.pointerId);const p=pt(e);x.beginPath();x.moveTo(p[0],p[1])};c.onpointermove=e=>{if(!down)return;const p=pt(e);x.lineTo(p[0],p[1]);x.stroke();ok=true};c.onpointerup=()=>down=false;c.onpointercancel=()=>down=false;return{get ok(){return ok},data:()=>c.toDataURL("image/png"),clear:()=>{x.clearRect(0,0,c.width,c.height);ok=false}}}
 async function registerSW(){if(!("serviceWorker"in navigator))return null;try{S.sw=await navigator.serviceWorker.register("sw.js",{scope:"./"});return S.sw}catch{return null}}
 async function enablePush(){
@@ -687,7 +708,7 @@ function userDialog(roles){showModal('<div class="between"><h3>Benutzer erstelle
 async function settings(c){
   c.innerHTML='<div class="grid g2"><div class="card"><h3>Firma & Branding</h3><div class="field"><label class="label">Anzeigename</label><input id="bn" class="input" value="'+esc(S.company.name)+'"></div><div class="field"><label class="label">Rechtlicher Firmenname</label><input id="blegal" class="input" value="'+esc(S.company.legal_name||"")+'" placeholder="z. B. Muster Elektro AG"></div><div class="field"><label class="label">Firmenadresse</label><input id="baddr" class="input" value="'+esc(S.company.address||"")+'"></div><div class="field"><label class="label">Akzentfarbe</label><input id="bc" class="input" type="color" value="'+esc(S.company.accent_color||"#111827")+'"></div><div class="field"><label class="label">Logo</label><input id="bl" class="input" type="file" accept="image/*"></div><button id="bs" class="btn primary">Speichern</button></div><div class="card"><h3>Abo</h3><div id="bill">Laden…</div></div><div class="card"><h3>Mein Konto</h3><div class="small muted" style="margin-bottom:12px">'+esc(S.session?.user?.email||"")+'</div><button id="mypw" class="btn">Passwort ändern</button></div></div>';
   try{const x=(await rpc("rf_billing_preview",{p_company_id:S.companyId})||[])[0];if(x){const pl={development:"Entwicklung",starter:"Starter",team:"Team",business:"Business",enterprise:"Enterprise"}[x.plan]||x.plan;document.getElementById("bill").innerHTML='<div class="metric">'+(x.plan==="development"?"CHF 0":"CHF "+x.estimated_monthly_chf)+'</div><div class="muted">'+esc(pl)+' · '+x.active_internal_profiles+' interne Profile</div><div class="small muted">Kundenkonten, Projekte und Regien werden nicht pro Stück verrechnet.</div>'+(x.plan!=="development"?'<button id="billingportal" class="btn" style="margin-top:12px">Abo & Rechnungen verwalten</button>':"");if(document.getElementById("billingportal"))document.getElementById("billingportal").onclick=async()=>{try{const o=await invoke("rf-billing-portal",{companyId:S.companyId});if(!o.url)throw new Error("Aboportal konnte nicht geöffnet werden.");location.href=o.url}catch(e){toast(em(e))}}}else document.getElementById("bill").innerHTML="Entwicklungsmodus"}catch{}
-  document.getElementById("bs").onclick=async()=>{try{let lp=S.company.logo_path;const f=document.getElementById("bl").files[0];if(f){const ext=(f.name.split(".").pop()||"png").toLowerCase(),path=S.companyId+"/"+crypto.randomUUID()+"."+ext,r=await sb.storage.from("rf-branding").upload(path,f,{contentType:f.type,upsert:false});if(r.error)throw r.error;lp=path}const r=await sb.from("rf_companies").update({name:document.getElementById("bn").value.trim(),legal_name:document.getElementById("blegal").value.trim()||null,address:document.getElementById("baddr").value.trim()||null,accent_color:document.getElementById("bc").value,logo_path:lp}).eq("id",S.companyId).select().single();if(r.error)throw r.error;S.company=r.data;document.documentElement.style.setProperty("--accent",S.company.accent_color);S.logoUrl=lp?await signed(lp,"rf-branding"):null;toast("Gespeichert");renderShell();await renderTab()}catch(e){toast(em(e))}}
+  document.getElementById("bs").onclick=async()=>{try{let lp=S.company.logo_path;const f=document.getElementById("bl").files[0];if(f)lp=await uploadBranding(f);const r=await sb.from("rf_companies").update({name:document.getElementById("bn").value.trim(),legal_name:document.getElementById("blegal").value.trim()||null,address:document.getElementById("baddr").value.trim()||null,accent_color:document.getElementById("bc").value}).eq("id",S.companyId).select().single();if(r.error)throw r.error;S.company=r.data;document.documentElement.style.setProperty("--accent",S.company.accent_color);S.logoUrl=lp?await signed(lp,"rf-branding"):null;toast("Gespeichert");renderShell();await renderTab()}catch(e){toast(em(e))}}
   document.getElementById("mypw").onclick=passwordDialog;
 }
 function passwordDialog(){
