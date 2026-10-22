@@ -1,0 +1,44 @@
+name: RegieFlow encrypted backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout RegieFlow branch
+        uses: actions/checkout@v4
+        with:
+          ref: regieflow-web-preview
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create encrypted RegieFlow backup
+        env:
+          REGIEFLOW_DATABASE_URL: ${{ secrets.REGIEFLOW_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.REGIEFLOW_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.REGIEFLOW_SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_PASSPHRASE: ${{ secrets.REGIEFLOW_BACKUP_PASSPHRASE }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/regieflow-backups"
+          chmod +x regieflow/ops/backup-regieflow.sh
+          regieflow/ops/backup-regieflow.sh "$RUNNER_TEMP/regieflow-backups"
+          ls -lh "$RUNNER_TEMP/regieflow-backups"
+
+      - name: Upload encrypted backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: regieflow-encrypted-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/regieflow-backups/*.enc
+          if-no-files-found: error
+          retention-days: 30
