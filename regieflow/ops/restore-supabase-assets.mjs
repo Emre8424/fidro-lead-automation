@@ -21,6 +21,13 @@ async function walk(dir) {
 function encPath(path) {
   return path.split("/").map(encodeURIComponent).join("/");
 }
+function contentType(path) {
+  const p = path.toLowerCase();
+  if (p.endsWith(".png")) return "image/png";
+  if (p.endsWith(".jpg") || p.endsWith(".jpeg")) return "image/jpeg";
+  if (p.endsWith(".pdf")) return "application/pdf";
+  return "application/octet-stream";
+}
 async function ensureBucket(bucket) {
   const r = await fetch(`${base}/storage/v1/bucket/${encodeURIComponent(bucket)}`, { headers });
   if (r.ok) return;
@@ -44,7 +51,7 @@ for (const bucket of ["rf-private", "rf-branding"]) {
     const bytes = await readFile(file);
     const r = await fetch(`${base}/storage/v1/object/${encodeURIComponent(bucket)}/${encPath(rel)}`, {
       method: "POST",
-      headers: { ...headers, "Content-Type": "application/octet-stream", "x-upsert": "true" },
+      headers: { ...headers, "Content-Type": contentType(rel), "x-upsert": "true" },
       body: bytes,
     });
     if (!r.ok) throw new Error(`Restore ${bucket}/${rel}: ${r.status} ${await r.text()}`);
