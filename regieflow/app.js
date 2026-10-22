@@ -687,14 +687,14 @@ async function team(c){
   if(document.getElementById("addU"))document.getElementById("addU").onclick=()=>userDialog(roles);
   if(document.getElementById("ownerTransfer"))document.getElementById("ownerTransfer").onclick=()=>ownerTransferDialog(members);
 }
-function roleDialog(perms){showModal('<div class="between"><h3>Neue Rolle</h3><button id="x" class="btn">✕</button></div><input id="rname" class="input" placeholder="z. B. Projektleiter">'+perms.map(p=>'<label style="display:block;padding:8px 0"><input type="checkbox" data-perm="'+esc(p.key)+'"> <strong>'+esc(p.label_de)+'</strong><div class="small muted" style="margin-left:22px">'+esc(p.description_de)+'</div></label>').join("")+'<button id="rsave" class="btn primary" style="width:100%">Erstellen</button>');document.getElementById("x").onclick=closeModal;document.getElementById("rsave").onclick=async()=>{try{const ps=Array.from(document.querySelectorAll("[data-perm]:checked")).map(x=>x.dataset.perm),r=await sb.from("rf_roles").insert({company_id:S.companyId,name:document.getElementById("rname").value.trim(),permissions:ps,created_by:S.session.user.id});if(r.error)throw r.error;closeModal();toast("Rolle erstellt");await renderTab()}catch(e){toast(em(e))}}}
+function roleDialog(perms){showModal('<div class="between"><h3>Neue Rolle</h3><button id="x" class="btn">✕</button></div><input id="rname" class="input" placeholder="z. B. Projektleiter">'+perms.map(p=>'<label style="display:block;padding:8px 0"><input type="checkbox" data-perm="'+esc(p.key)+'"> <strong>'+esc(p.label_de)+'</strong><div class="small muted" style="margin-left:22px">'+esc(p.description_de)+'</div></label>').join("")+'<button id="rsave" class="btn primary" style="width:100%">Erstellen</button>');document.getElementById("x").onclick=closeModal;document.getElementById("rsave").onclick=async()=>{try{const ps=Array.from(document.querySelectorAll("[data-perm]:checked")).map(x=>x.dataset.perm);await rpc("rf_create_role",{p_company_id:S.companyId,p_name:document.getElementById("rname").value.trim(),p_permissions:ps});closeModal();toast("Rolle erstellt");await renderTab()}catch(e){toast(em(e))}}}
 function editRoleDialog(role,perms){
   showModal('<div class="between"><h3>Rolle bearbeiten</h3><button id="x" class="btn">✕</button></div><input id="ername" class="input" value="'+esc(role.name)+'">'+perms.map(p=>'<label style="display:block;padding:8px 0"><input type="checkbox" data-eperm="'+esc(p.key)+'" '+((role.permissions||[]).includes(p.key)?"checked":"")+'> <strong>'+esc(p.label_de)+'</strong><div class="small muted" style="margin-left:22px">'+esc(p.description_de)+'</div></label>').join("")+'<button id="ersave" class="btn primary" style="width:100%">Speichern</button>');
   document.getElementById("x").onclick=closeModal;
   document.getElementById("ersave").onclick=async()=>{try{
     const ps=Array.from(document.querySelectorAll("[data-eperm]:checked")).map(x=>x.dataset.eperm);
-    const r=await sb.from("rf_roles").update({name:document.getElementById("ername").value.trim(),permissions:ps}).eq("id",role.id);
-    if(r.error)throw r.error;closeModal();toast("Rolle gespeichert");await renderTab();
+    await rpc("rf_update_role",{p_role_id:role.id,p_name:document.getElementById("ername").value.trim(),p_permissions:ps});
+    closeModal();toast("Rolle gespeichert");await renderTab();
   }catch(e){toast(em(e))}}
 }
 function ownerTransferDialog(members){
