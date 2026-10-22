@@ -1,23 +1,3 @@
--- 20261001072206 regieflow_internal_account_onboarding_v1
-
-alter table public.rf_memberships
-  add column must_change_password boolean not null default false;
-
-insert into regieflow_private.dev_log(kind,title,content)
-values('decision','Internal account onboarding','New internal accounts created by the Owner/authorized user receive a generated temporary password and are marked must_change_password=true. Existing Supabase users linked into a RegieFlow company keep their existing credentials and are not forced to change them.');
-
-
--- 20261001102926 regieflow_disable_obsolete_public_web_bucket_v1
-
-update storage.buckets
-set public=false
-where id='rf-web';
-
-insert into regieflow_private.dev_log(kind,title,content) values
-('completed','Obsolete rf-web bucket made private',
-'The temporary Supabase Storage frontend bucket from the failed hosting experiment still existed as public with three stale objects. It is no longer used because Cloudflare Pages is canonical hosting. The bucket was switched to private to remove unnecessary public surface without deleting evidence or files.');
-
-
 -- 20261001071253 regieflow_core_tables_v1
 
 create or replace function public.rf_set_updated_at()
@@ -1812,6 +1792,15 @@ insert into regieflow_private.dev_log(kind,title,content) values
 'Added hashed one-time customer invite tokens. Office/authorized internal users can create an invite for an existing customer contact; the customer will later sign up for a free account and claim the invite. Added a service-role-only auth-user lookup by email to support internal account creation without duplicating users already present in the shared Supabase Auth project.');
 
 
+-- 20261001072206 regieflow_internal_account_onboarding_v1
+
+alter table public.rf_memberships
+  add column must_change_password boolean not null default false;
+
+insert into regieflow_private.dev_log(kind,title,content)
+values('decision','Internal account onboarding','New internal accounts created by the Owner/authorized user receive a generated temporary password and are marked must_change_password=true. Existing Supabase users linked into a RegieFlow company keep their existing credentials and are not forced to change them.');
+
+
 -- 20261001072332 regieflow_pricing_catalog_v1
 
 create table public.rf_plan_catalog (
@@ -3258,19 +3247,6 @@ insert into regieflow_private.dev_log(kind,title,content) values
 'Renamed the internal project reference column to external_project_reference and Regie closeout field to rapport_number. Recreated rf_close_regie with neutral p_rapport_number naming. RegieFlow is now system-neutral in both visible UI and core schema; integrations with Messerli, Bexio or other ERP/rapport systems can map to generic references.');
 
 
--- 20261001102443 regieflow_neutralize_overview_columns_v1
-
-alter view public.rf_regie_overview
-  rename column messerli_rapport_number to rapport_number;
-
-alter view public.rf_regie_overview
-  rename column messerli_project_number to external_project_reference;
-
-insert into regieflow_private.dev_log(kind,title,content) values
-('completed','Removed final Messerli-specific overview aliases',
-'The rf_regie_overview view still exposed two legacy Messerli-named aliases even though base tables had already been neutralized. Renamed them to rapport_number and external_project_reference. The view remains security_invoker=true, so underlying RLS applies to every query.');
-
-
 -- 20261001092849 regieflow_close_rpc_compatibility_v1
 
 drop function if exists public.rf_close_regie(uuid,text);
@@ -3682,97 +3658,6 @@ drop function if exists public.rf_finalize_customer_decision(
 insert into regieflow_private.dev_log(kind,title,content) values
 ('completed','Removed legacy approval and close RPCs',
 'Cloudflare frontend is now deployed with rf_close_regie_v2 and both customer approval Edge Functions use rf_finalize_customer_decision_v2. The legacy close and customer-finalization RPCs were removed to reduce attack surface and eliminate old vendor-specific parameter naming.');
-
-
--- 20261001102742 regieflow_split_rls_write_policies_v1
-
-drop policy if exists rf_customer_contacts_write on public.rf_customer_contacts;
-create policy rf_customer_contacts_insert on public.rf_customer_contacts
-for insert to authenticated
-with check (public.rf_has_permission(company_id,'projects.manage'));
-create policy rf_customer_contacts_update on public.rf_customer_contacts
-for update to authenticated
-using (public.rf_has_permission(company_id,'projects.manage'))
-with check (public.rf_has_permission(company_id,'projects.manage'));
-create policy rf_customer_contacts_delete on public.rf_customer_contacts
-for delete to authenticated
-using (public.rf_has_permission(company_id,'projects.manage'));
-
-drop policy if exists rf_memberships_write on public.rf_memberships;
-create policy rf_memberships_insert on public.rf_memberships
-for insert to authenticated
-with check (public.rf_has_permission(company_id,'users.manage'));
-create policy rf_memberships_update on public.rf_memberships
-for update to authenticated
-using (public.rf_has_permission(company_id,'users.manage'))
-with check (public.rf_has_permission(company_id,'users.manage'));
-create policy rf_memberships_delete on public.rf_memberships
-for delete to authenticated
-using (public.rf_has_permission(company_id,'users.manage'));
-
-drop policy if exists rf_project_customer_access_write on public.rf_project_customer_access;
-create policy rf_project_customer_access_insert on public.rf_project_customer_access
-for insert to authenticated
-with check (
-  exists (
-    select 1 from public.rf_projects p
-    where p.id=project_id
-      and public.rf_has_permission(p.company_id,'projects.manage')
-  )
-);
-create policy rf_project_customer_access_update on public.rf_project_customer_access
-for update to authenticated
-using (
-  exists (
-    select 1 from public.rf_projects p
-    where p.id=project_id
-      and public.rf_has_permission(p.company_id,'projects.manage')
-  )
-)
-with check (
-  exists (
-    select 1 from public.rf_projects p
-    where p.id=project_id
-      and public.rf_has_permission(p.company_id,'projects.manage')
-  )
-);
-create policy rf_project_customer_access_delete on public.rf_project_customer_access
-for delete to authenticated
-using (
-  exists (
-    select 1 from public.rf_projects p
-    where p.id=project_id
-      and public.rf_has_permission(p.company_id,'projects.manage')
-  )
-);
-
-drop policy if exists rf_projects_write on public.rf_projects;
-create policy rf_projects_insert on public.rf_projects
-for insert to authenticated
-with check (public.rf_has_permission(company_id,'projects.manage'));
-create policy rf_projects_update on public.rf_projects
-for update to authenticated
-using (public.rf_has_permission(company_id,'projects.manage'))
-with check (public.rf_has_permission(company_id,'projects.manage'));
-create policy rf_projects_delete on public.rf_projects
-for delete to authenticated
-using (public.rf_has_permission(company_id,'projects.manage'));
-
-drop policy if exists rf_roles_write on public.rf_roles;
-create policy rf_roles_insert on public.rf_roles
-for insert to authenticated
-with check (public.rf_has_permission(company_id,'roles.manage'));
-create policy rf_roles_update on public.rf_roles
-for update to authenticated
-using (public.rf_has_permission(company_id,'roles.manage'))
-with check (public.rf_has_permission(company_id,'roles.manage'));
-create policy rf_roles_delete on public.rf_roles
-for delete to authenticated
-using (public.rf_has_permission(company_id,'roles.manage'));
-
-insert into regieflow_private.dev_log(kind,title,content) values
-('completed','RLS write policies split by operation',
-'Replaced broad ALL write policies on customer contacts, memberships, project customer access, projects and roles with separate INSERT/UPDATE/DELETE policies. This removes overlapping permissive SELECT policy evaluation and makes each mutation rule explicit without changing authorization semantics.');
 
 
 -- 20261001095124 regieflow_customer_request_approval_permission_v1
@@ -4190,6 +4075,121 @@ insert into regieflow_private.dev_log(kind,title,content) values
 'Frontend mutation audit found several RLS-protected operations lost their table-level privileges during earlier grant minimization. Restored only the operations actually used by the app: company settings update, project insert, customer-contact insert, project-customer access update, unlocked draft-version update, membership role update, notification read-state update, and push-subscription upsert update. No direct INSERT/UPDATE privilege was restored on rf_regies; workflow state remains RPC-only.');
 
 
+-- 20261001102443 regieflow_neutralize_overview_columns_v1
+
+alter view public.rf_regie_overview
+  rename column messerli_rapport_number to rapport_number;
+
+alter view public.rf_regie_overview
+  rename column messerli_project_number to external_project_reference;
+
+insert into regieflow_private.dev_log(kind,title,content) values
+('completed','Removed final Messerli-specific overview aliases',
+'The rf_regie_overview view still exposed two legacy Messerli-named aliases even though base tables had already been neutralized. Renamed them to rapport_number and external_project_reference. The view remains security_invoker=true, so underlying RLS applies to every query.');
+
+
+-- 20261001102742 regieflow_split_rls_write_policies_v1
+
+drop policy if exists rf_customer_contacts_write on public.rf_customer_contacts;
+create policy rf_customer_contacts_insert on public.rf_customer_contacts
+for insert to authenticated
+with check (public.rf_has_permission(company_id,'projects.manage'));
+create policy rf_customer_contacts_update on public.rf_customer_contacts
+for update to authenticated
+using (public.rf_has_permission(company_id,'projects.manage'))
+with check (public.rf_has_permission(company_id,'projects.manage'));
+create policy rf_customer_contacts_delete on public.rf_customer_contacts
+for delete to authenticated
+using (public.rf_has_permission(company_id,'projects.manage'));
+
+drop policy if exists rf_memberships_write on public.rf_memberships;
+create policy rf_memberships_insert on public.rf_memberships
+for insert to authenticated
+with check (public.rf_has_permission(company_id,'users.manage'));
+create policy rf_memberships_update on public.rf_memberships
+for update to authenticated
+using (public.rf_has_permission(company_id,'users.manage'))
+with check (public.rf_has_permission(company_id,'users.manage'));
+create policy rf_memberships_delete on public.rf_memberships
+for delete to authenticated
+using (public.rf_has_permission(company_id,'users.manage'));
+
+drop policy if exists rf_project_customer_access_write on public.rf_project_customer_access;
+create policy rf_project_customer_access_insert on public.rf_project_customer_access
+for insert to authenticated
+with check (
+  exists (
+    select 1 from public.rf_projects p
+    where p.id=project_id
+      and public.rf_has_permission(p.company_id,'projects.manage')
+  )
+);
+create policy rf_project_customer_access_update on public.rf_project_customer_access
+for update to authenticated
+using (
+  exists (
+    select 1 from public.rf_projects p
+    where p.id=project_id
+      and public.rf_has_permission(p.company_id,'projects.manage')
+  )
+)
+with check (
+  exists (
+    select 1 from public.rf_projects p
+    where p.id=project_id
+      and public.rf_has_permission(p.company_id,'projects.manage')
+  )
+);
+create policy rf_project_customer_access_delete on public.rf_project_customer_access
+for delete to authenticated
+using (
+  exists (
+    select 1 from public.rf_projects p
+    where p.id=project_id
+      and public.rf_has_permission(p.company_id,'projects.manage')
+  )
+);
+
+drop policy if exists rf_projects_write on public.rf_projects;
+create policy rf_projects_insert on public.rf_projects
+for insert to authenticated
+with check (public.rf_has_permission(company_id,'projects.manage'));
+create policy rf_projects_update on public.rf_projects
+for update to authenticated
+using (public.rf_has_permission(company_id,'projects.manage'))
+with check (public.rf_has_permission(company_id,'projects.manage'));
+create policy rf_projects_delete on public.rf_projects
+for delete to authenticated
+using (public.rf_has_permission(company_id,'projects.manage'));
+
+drop policy if exists rf_roles_write on public.rf_roles;
+create policy rf_roles_insert on public.rf_roles
+for insert to authenticated
+with check (public.rf_has_permission(company_id,'roles.manage'));
+create policy rf_roles_update on public.rf_roles
+for update to authenticated
+using (public.rf_has_permission(company_id,'roles.manage'))
+with check (public.rf_has_permission(company_id,'roles.manage'));
+create policy rf_roles_delete on public.rf_roles
+for delete to authenticated
+using (public.rf_has_permission(company_id,'roles.manage'));
+
+insert into regieflow_private.dev_log(kind,title,content) values
+('completed','RLS write policies split by operation',
+'Replaced broad ALL write policies on customer contacts, memberships, project customer access, projects and roles with separate INSERT/UPDATE/DELETE policies. This removes overlapping permissive SELECT policy evaluation and makes each mutation rule explicit without changing authorization semantics.');
+
+
+-- 20261001102926 regieflow_disable_obsolete_public_web_bucket_v1
+
+update storage.buckets
+set public=false
+where id='rf-web';
+
+insert into regieflow_private.dev_log(kind,title,content) values
+('completed','Obsolete rf-web bucket made private',
+'The temporary Supabase Storage frontend bucket from the failed hosting experiment still existed as public with three stale objects. It is no longer used because Cloudflare Pages is canonical hosting. The bucket was switched to private to remove unnecessary public surface without deleting evidence or files.');
+
+
 -- 20261001102958 regieflow_public_link_first_view_evidence_v1
 
 alter table public.rf_public_approval_links
@@ -4421,17 +4421,6 @@ revoke insert on public.rf_regie_files from authenticated;
 insert into regieflow_private.dev_log(kind,title,content) values
 ('completed','Evidence uploads moved behind trusted server endpoint',
 'The live frontend now sends before/after/customer-request evidence through rf-upload-evidence. The Edge Function authenticates the user, validates Regie lifecycle and permissions, generates the storage path, uploads the bytes with service credentials, computes SHA-256 server-side, records actual byte size/MIME type and uploader provenance, and removes the object if registration fails. Direct authenticated uploads to rf-private and direct rf_regie_files inserts were disabled, preventing clients from forging evidence hashes or metadata.');
-
-
--- 20261001150059 regieflow_evidence_upload_rpc_only_v1
-
-revoke insert on public.rf_regie_files from authenticated;
-
-drop policy if exists rf_private_insert on storage.objects;
-
-insert into regieflow_private.dev_log(kind,title,content) values
-('completed','Evidence uploads forced through server endpoint',
-'The frontend now uses rf-upload-evidence for all before/after/attachment/customer-request files. Direct authenticated INSERT on rf_regie_files and the direct rf-private Storage INSERT policy were removed. The server endpoint validates caller identity, project/Regie lifecycle, file size/type, computes SHA-256, records uploader identity and cleans up failed uploads. This prevents clients from bypassing evidence validation or creating orphan evidence objects.');
 
 
 -- 20261001104819 regieflow_comment_notifications_v1
@@ -4959,6 +4948,17 @@ insert into regieflow_private.dev_log(kind,title,content) values
 'Frontend uses rf_add_regie_comment rather than direct table inserts. Direct INSERT privilege on rf_regie_comments was revoked again so users cannot bypass archive read-only checks, audit logging, or comment notifications. Comment creation is now forced through the controlled RPC.');
 
 
+-- 20261001150059 regieflow_evidence_upload_rpc_only_v1
+
+revoke insert on public.rf_regie_files from authenticated;
+
+drop policy if exists rf_private_insert on storage.objects;
+
+insert into regieflow_private.dev_log(kind,title,content) values
+('completed','Evidence uploads forced through server endpoint',
+'The frontend now uses rf-upload-evidence for all before/after/attachment/customer-request files. Direct authenticated INSERT on rf_regie_files and the direct rf-private Storage INSERT policy were removed. The server endpoint validates caller identity, project/Regie lifecycle, file size/type, computes SHA-256, records uploader identity and cleans up failed uploads. This prevents clients from bypassing evidence validation or creating orphan evidence objects.');
+
+
 -- 20261001150708 regieflow_column_level_update_hardening_v1
 
 revoke update on public.rf_companies from authenticated;
@@ -5293,23 +5293,6 @@ insert into regieflow_private.dev_log(kind,title,content) values
 'Added controlled project editing for project number, name, address, client/Bauherr, approval flow and active status. The RPC requires projects.manage and leaves company/ownership identity immutable. Existing project audit trigger records changes.');
 
 
--- 20261001215940 regieflow_stripe_checkout_fields_v1
-
-alter table regieflow_private.signup_intents
-  add column if not exists stripe_checkout_url text;
-
-alter table public.rf_plan_catalog
-  add column if not exists stripe_extra_price_id text;
-
-alter table public.rf_company_billing
-  add column if not exists stripe_extra_price_id text,
-  add column if not exists stripe_extra_subscription_item_id text;
-
-insert into regieflow_private.dev_log(kind,title,content) values
-('completed','Stripe checkout and extra-seat fields prepared',
-'Added private checkout URL storage for resumable paid onboarding plus Stripe extra-seat Price/item identifiers for later automatic billing of internal profiles above the plan allowance.');
-
-
 -- 20261001151539 regieflow_active_signer_link_guard_v1
 
 create or replace function public.rf_create_public_approval_link(
@@ -5546,93 +5529,6 @@ grant execute on function public.rf_create_customer_invite(uuid,integer) to auth
 insert into regieflow_private.dev_log(kind,title,content) values
 ('completed','Customer invitations reduced to one active token',
 'Creating a new customer-account invitation now revokes prior unused invitations for that contact and writes an audit event. This reduces stale invitation exposure while preserving one-time hashed-token onboarding.');
-
-
--- 20261001220257 regieflow_seat_billing_dispatch_v2
-
-create table if not exists regieflow_private.billing_config (
-  singleton boolean primary key default true check (singleton),
-  hook_secret text not null,
-  updated_at timestamptz not null default now()
-);
-
-revoke all on regieflow_private.billing_config from public,anon,authenticated;
-
-insert into regieflow_private.billing_config(singleton,hook_secret)
-values(true,encode(gen_random_bytes(32),'hex'))
-on conflict (singleton) do nothing;
-
-create or replace function public.rf_billing_get_config()
-returns jsonb
-language sql
-security definer
-set search_path=regieflow_private,public
-as $$
-  select jsonb_build_object('hook_secret',hook_secret)
-  from regieflow_private.billing_config
-  where singleton=true;
-$$;
-
-revoke all on function public.rf_billing_get_config() from public,anon,authenticated;
-grant execute on function public.rf_billing_get_config() to service_role;
-
-create or replace function regieflow_private.dispatch_seat_billing_sync()
-returns trigger
-language plpgsql
-security definer
-set search_path=public,regieflow_private,net
-as $$
-declare
-  v_company uuid;
-  v_plan text;
-  v_secret text;
-begin
-  if tg_op='UPDATE' and old.active is not distinct from new.active then
-    return new;
-  end if;
-
-  if tg_op='DELETE' then
-    v_company := old.company_id;
-  else
-    v_company := new.company_id;
-  end if;
-
-  select plan into v_plan
-  from public.rf_company_billing
-  where company_id=v_company;
-
-  if v_plan is null or v_plan='development' then
-    if tg_op='DELETE' then return old; else return new; end if;
-  end if;
-
-  select hook_secret into v_secret
-  from regieflow_private.billing_config
-  where singleton=true;
-
-  perform net.http_post(
-    url := 'https://kiihabzzepoehsokglzq.supabase.co/functions/v1/rf-sync-seat-billing',
-    headers := jsonb_build_object(
-      'Content-Type','application/json',
-      'x-regieflow-billing-hook',v_secret
-    ),
-    body := jsonb_build_object('companyId',v_company)
-  );
-
-  if tg_op='DELETE' then return old; else return new; end if;
-end
-$$;
-
-revoke all on function regieflow_private.dispatch_seat_billing_sync() from public,anon,authenticated;
-
-drop trigger if exists rf_memberships_seat_billing_sync on public.rf_memberships;
-create trigger rf_memberships_seat_billing_sync
-after insert or delete or update of active
-on public.rf_memberships
-for each row execute function regieflow_private.dispatch_seat_billing_sync();
-
-insert into regieflow_private.dev_log(kind,title,content) values
-('completed','Automatic seat-billing dispatch prepared',
-'Paid-plan membership insert/delete/activation changes now enqueue a private authenticated Edge call to synchronize extra internal-profile quantities with Stripe. Development-plan companies are skipped. The billing hook uses a dedicated private random secret separate from Push.');
 
 
 -- 20261001152315 regieflow_revoke_approval_links_v1
@@ -6176,6 +6072,110 @@ revoke all on function public.rf_provision_paid_company(uuid,text)
   from public,anon,authenticated;
 grant execute on function public.rf_provision_paid_company(uuid,text)
   to service_role;
+
+
+-- 20261001215940 regieflow_stripe_checkout_fields_v1
+
+alter table regieflow_private.signup_intents
+  add column if not exists stripe_checkout_url text;
+
+alter table public.rf_plan_catalog
+  add column if not exists stripe_extra_price_id text;
+
+alter table public.rf_company_billing
+  add column if not exists stripe_extra_price_id text,
+  add column if not exists stripe_extra_subscription_item_id text;
+
+insert into regieflow_private.dev_log(kind,title,content) values
+('completed','Stripe checkout and extra-seat fields prepared',
+'Added private checkout URL storage for resumable paid onboarding plus Stripe extra-seat Price/item identifiers for later automatic billing of internal profiles above the plan allowance.');
+
+
+-- 20261001220257 regieflow_seat_billing_dispatch_v2
+
+create table if not exists regieflow_private.billing_config (
+  singleton boolean primary key default true check (singleton),
+  hook_secret text not null,
+  updated_at timestamptz not null default now()
+);
+
+revoke all on regieflow_private.billing_config from public,anon,authenticated;
+
+insert into regieflow_private.billing_config(singleton,hook_secret)
+values(true,encode(gen_random_bytes(32),'hex'))
+on conflict (singleton) do nothing;
+
+create or replace function public.rf_billing_get_config()
+returns jsonb
+language sql
+security definer
+set search_path=regieflow_private,public
+as $$
+  select jsonb_build_object('hook_secret',hook_secret)
+  from regieflow_private.billing_config
+  where singleton=true;
+$$;
+
+revoke all on function public.rf_billing_get_config() from public,anon,authenticated;
+grant execute on function public.rf_billing_get_config() to service_role;
+
+create or replace function regieflow_private.dispatch_seat_billing_sync()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,regieflow_private,net
+as $$
+declare
+  v_company uuid;
+  v_plan text;
+  v_secret text;
+begin
+  if tg_op='UPDATE' and old.active is not distinct from new.active then
+    return new;
+  end if;
+
+  if tg_op='DELETE' then
+    v_company := old.company_id;
+  else
+    v_company := new.company_id;
+  end if;
+
+  select plan into v_plan
+  from public.rf_company_billing
+  where company_id=v_company;
+
+  if v_plan is null or v_plan='development' then
+    if tg_op='DELETE' then return old; else return new; end if;
+  end if;
+
+  select hook_secret into v_secret
+  from regieflow_private.billing_config
+  where singleton=true;
+
+  perform net.http_post(
+    url := 'https://kiihabzzepoehsokglzq.supabase.co/functions/v1/rf-sync-seat-billing',
+    headers := jsonb_build_object(
+      'Content-Type','application/json',
+      'x-regieflow-billing-hook',v_secret
+    ),
+    body := jsonb_build_object('companyId',v_company)
+  );
+
+  if tg_op='DELETE' then return old; else return new; end if;
+end
+$$;
+
+revoke all on function regieflow_private.dispatch_seat_billing_sync() from public,anon,authenticated;
+
+drop trigger if exists rf_memberships_seat_billing_sync on public.rf_memberships;
+create trigger rf_memberships_seat_billing_sync
+after insert or delete or update of active
+on public.rf_memberships
+for each row execute function regieflow_private.dispatch_seat_billing_sync();
+
+insert into regieflow_private.dev_log(kind,title,content) values
+('completed','Automatic seat-billing dispatch prepared',
+'Paid-plan membership insert/delete/activation changes now enqueue a private authenticated Edge call to synchronize extra internal-profile quantities with Stripe. Development-plan companies are skipped. The billing hook uses a dedicated private random secret separate from Push.');
 
 
 -- 20261001220345 regieflow_member_activation_billing_guard_v1
