@@ -21,6 +21,7 @@ Current function source snapshots are stored below `regieflow/supabase/functions
 - rf-customer-signup
 - rf-push
 - rf-upload-evidence
+- rf-upload-branding
 - rf-create-checkout
 - rf-stripe-webhook
 - rf-onboarding-status
@@ -73,23 +74,27 @@ Before public launch choose one:
 Move RegieFlow to its own paid Supabase project and enable managed backups appropriate to the required retention/RPO. Storage still needs its own off-site protection because database backups do not restore deleted Storage objects.
 
 ### Temporary/self-managed setup
-Run recurring off-site exports:
 
-- Database: `supabase db dump --data-only --linked`
-- Schema/migrations: keep the complete RegieFlow migration chain in source control / export current schema before cutover.
-- Storage: export all objects from `rf-private` and `rf-branding` to an encrypted off-site bucket.
-- Edge Functions: source snapshots live in this branch.
-- Frontend: versioned in this branch.
-- Secrets/configuration: document names/locations, never commit plaintext values.
+The executable runbook is in `regieflow/ops/`:
 
-A restore drill must recreate:
-- database schema + data,
-- Auth users,
+- `backup-regieflow.sh`
+- `export-supabase-assets.mjs`
+- `restore-regieflow.sh`
+- `restore-auth-users.mjs`
+- `restore-supabase-assets.mjs`
+- `ops/README.md`
+
+The encrypted backup contains:
+
+- deterministic applied RegieFlow migration SQL,
+- RegieFlow database/private rows,
+- RegieFlow Auth users with their original UUIDs and password hashes,
 - `rf-private` and `rf-branding` objects,
-- Edge Functions,
-- private server configuration/secrets,
-- frontend configuration,
-then pass the full Regie E2E test.
+- checksums and an emergency full schema snapshot.
+
+The restore procedure preserves Auth UUIDs before restoring FK-dependent RegieFlow rows, restores Storage with correct image/PDF MIME types, and finishes with `rf_system_integrity_check()`.
+
+A **real off-site destination and a restore drill against a non-production project are still mandatory** before marking production backup readiness true. Do not commit encrypted production backups or backup secrets to this public repository.
 
 ## Tested live flows
 
@@ -118,11 +123,13 @@ The remaining browser-only tests are tracked in the private launch checklist.
 
 ## Migration history
 
-The authoritative migration history is in Supabase. Use `mcp list_migrations` / Supabase CLI before a restore or production move. RegieFlow migrations start at:
+The live authoritative migration history remains in `supabase_migrations.schema_migrations`. Applied RegieFlow migrations are also source-controlled under:
 
-`20261001071253_regieflow_core_tables_v1`
+`regieflow/supabase/migrations/`
 
-and continue through the latest `regieflow_*` migrations. Do not replay DriveLoop migrations into a standalone RegieFlow project unless they are explicitly required by a shared dependency.
+These snapshots contain only migrations whose names start with `regieflow_`, ordered by migration version, and intentionally exclude DriveLoop migrations. The backup script independently generates a fresh migration bundle from the live migration table at backup time.
+
+RegieFlow migrations start at `20261001071253_regieflow_core_tables_v1`.
 
 ## Production move recommendation
 
