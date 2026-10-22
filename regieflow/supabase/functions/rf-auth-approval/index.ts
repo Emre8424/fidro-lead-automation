@@ -70,7 +70,8 @@ Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
   if(req.method!=="POST")return json({error:"Method not allowed"},405);
   const url=Deno.env.get("SUPABASE_URL"),anon=Deno.env.get("SUPABASE_ANON_KEY"),service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),auth=req.headers.get("Authorization");
-  if(!url||!anon||!service||!auth)return json({error:"Server configuration missing"},500);
+  if(!url||!anon||!service)return json({error:"Server configuration missing"},500);
+  if(!auth)return json({error:"Nicht angemeldet"},401);
   const userClient=createClient(url,anon,{global:{headers:{Authorization:auth}},auth:{persistSession:false}});
   const {data:{user},error:ue}=await userClient.auth.getUser();if(ue||!user)return json({error:"Nicht angemeldet"},401);
   const admin=createClient(url,service,{auth:{persistSession:false}});
