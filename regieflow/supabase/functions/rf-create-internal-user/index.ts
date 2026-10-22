@@ -20,7 +20,8 @@ Deno.serve(async(req:Request)=>{
   const anon=Deno.env.get("SUPABASE_ANON_KEY");
   const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const auth=req.headers.get("Authorization");
-  if(!url||!anon||!service||!auth)return json({error:"Server configuration missing"},500);
+  if(!url||!anon||!service)return json({error:"Server configuration missing"},500);
+  if(!auth)return json({error:"Nicht angemeldet"},401);
 
   const caller=createClient(url,anon,{global:{headers:{Authorization:auth}},auth:{persistSession:false}});
   const {data:{user},error:userError}=await caller.auth.getUser();
