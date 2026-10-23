@@ -11,7 +11,7 @@ function renderSmsDashboardTest(t){
  if(!t)return;
  var el=document.getElementById('smsDashboardTest');
  if(!el){el=document.createElement('div');el.id='smsDashboardTest';el.className='card';document.getElementById('smsSetup').parentNode.insertBefore(el,document.getElementById('smsSetup').nextSibling);}
- el.innerHTML='<h3>Test an eigene Nummer</h3><p>+41 76 769 38 38 · einmaliger Verbindungstest</p><pre>'+esc(t.body)+'</pre><button id="smsDashboardTestSend" onclick="sendSmsDashboardTest()" '+(t.attempt||!t.available?'disabled':'')+'>Test-SMS an meine Nummer senden</button><button class="secondary" onclick="checkSmsProvider()">Verbindung prüfen (ohne SMS)</button><p id="smsDashboardTestResult" role="status">'+(t.attempt?'Test protokolliert: '+esc(t.attempt.status)+'. Kein erneuter Versand.':'Kundenversand bleibt gesperrt.')+'</p>';
+ el.innerHTML='<h3>Test an eigene Nummer</h3><p>+41 76 769 38 38 · einmaliger Verbindungstest</p><pre>'+esc(t.body)+'</pre><button id="smsDashboardTestSend" onclick="sendSmsDashboardTest()" '+(t.attempt||!t.available?'disabled':'')+'>Test-SMS an meine Nummer senden</button><button class="secondary" onclick="checkSmsProvider()">Verbindung prüfen (ohne SMS)</button><p id="smsDashboardTestResult" role="status">'+(t.attempt?(t.attempt.provider_code==='TLS_CONNECT_FAILURE'?'Verbindung zu ASPSMS fehlgeschlagen. Test-SMS wurde nicht übertragen.':('Test protokolliert: '+esc(t.attempt.status)+'. Kein erneuter Versand.')):'Kundenversand bleibt gesperrt.')+'</p>';
 }
 async function sendSmsDashboardTest(){
  var t=SMS_STATE&&SMS_STATE.dashboard_test;if(!t||t.attempt||!t.available)return;
@@ -22,6 +22,6 @@ async function sendSmsDashboardTest(){
 }
 
 async function checkSmsProvider(){
- try{var r=await call('/sms/provider-check');document.getElementById('smsDashboardTestResult').textContent='Anbieterdiagnose: '+JSON.stringify(r);}
+ try{var r=await call('/sms/provider-check');document.getElementById('smsDashboardTestResult').textContent=r.interface==='WebAPI'?'Anbieter erreichbar. Guthabenabfrage geprüft.':'Anbieterprüfung abgeschlossen.';}
  catch(e){document.getElementById('smsDashboardTestResult').textContent=e.message;}
 }
