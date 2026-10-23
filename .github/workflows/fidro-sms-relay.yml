@@ -77,7 +77,7 @@ jobs:
                 const url=new URL('https://webapi.aspsms.com/SendingStat03/Get');
                 url.searchParams.set('Userkey',job.userkey);url.searchParams.set('Password',job.password);url.searchParams.set('TransactionReferenceNumber',job.id);
                 const log=await provider(url);
-                if(Array.isArray(log.data)&&log.data.some(x=>x.TransactionReferenceNumber===job.id&&Number(x.DST)===0&&x.DSCTS)){delivered=true;break;}
+                if(Array.isArray(log.data)){const parts=log.data.filter(x=>x.TransactionReferenceNumber===job.id);if(parts.length>=Number(job.segments||1)&&parts.every(x=>Number(x.DST)===0&&x.DSCTS)){delivered=true;break;}}
                }catch{}
               }
              }
