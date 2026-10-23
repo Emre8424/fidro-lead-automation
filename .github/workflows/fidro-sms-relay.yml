@@ -18,9 +18,9 @@ concurrency:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
-      - name: Process one protected SMS job
+      - name: Process up to five protected SMS jobs
         shell: bash
         run: |
           node <<'FIDRO_NODE'
@@ -46,6 +46,7 @@ jobs:
             });
           }
           (async()=>{
+           for(let batch=0;batch<5;batch++){
            const oidc = await fetch(process.env.ACTIONS_ID_TOKEN_REQUEST_URL+'&audience=fidro-sms-relay',{headers:{Authorization:'Bearer '+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}});
            if(!oidc.ok)throw new Error('OIDC unavailable');
            const {value:token}=await oidc.json();
@@ -61,8 +62,14 @@ jobs:
             if(String(balance.data.StatusCode)!=='1') {status='rejected';code=String(balance.data.StatusCode||'BALANCE_FAILED');}
             else {
              credits=Number(balance.data.Credits);
+             if(!Number.isFinite(credits)||credits<3){
+              const deferred=await fetch(API+'/sms-relay/defer',{method:'POST',headers,body:JSON.stringify({id:job.id,lease:job.lease,credits,reason:'LOW_CREDITS'})});
+              if(!deferred.ok)throw new Error('Balance pause recording failed');
+              console.log('SMS queue paused for provider balance. No send attempted.');return;
+             }
              const r=await provider('https://json.aspsms.com/SendTextSMS',{UserName:job.userkey,Password:job.password,Originator:job.sender,Recipients:[job.phone+':'+job.id],MessageText:job.body,ForceGSM7bit:true});
              if(r.http===200&&r.data.StatusCode!==undefined){code=String(r.data.StatusCode);status=code==='1'?'accepted':'rejected';}
+             if(code==='5'){const deferred=await fetch(API+'/sms-relay/defer',{method:'POST',headers,body:JSON.stringify({id:job.id,lease:job.lease,credits,reason:'LOW_CREDITS'})});if(!deferred.ok)throw new Error('Balance pause failed');console.log('SMS queue paused: insufficient provider credits.');return;}
              if(status==='accepted'){
               for(let i=0;i<4;i++){
                await new Promise(r=>setTimeout(r,3000));
@@ -79,6 +86,8 @@ jobs:
            const result=await fetch(API+'/sms-relay/complete',{method:'POST',headers,body:JSON.stringify({id:job.id,lease:job.lease,status,code,delivered,credits})});
            if(!result.ok)throw new Error('Result recording failed; no automatic resend');
            console.log('SMS relay result: '+status+(delivered?' / delivery confirmed':''));
+           if(status!=='accepted')return;
+           }
           })().catch(()=>{console.error('SMS relay stopped. Check protected dashboard status; do not repeat uncertain sends.');process.exitCode=1;});
           
           FIDRO_NODE
