@@ -7,21 +7,27 @@ async function previewSms(){var l=smsSelected();if(!l)return toast('Kontakt ausw
 async function sendSms(){var p=SMS_PREVIEW,l=smsSelected();if(!p||p.blocks.length||!l||l.id!==p.lead_id)return;if(!confirm('Diese SMS an '+p.phone+' senden? CHF 0.30 werden vom Budget reserviert.'))return;document.getElementById('smsSend').disabled=true;SMS_PREVIEW=null;try{var r=await call('/sms/send',{method:'POST',body:JSON.stringify({lead_id:p.lead_id,body:p.body,confirm:true})});document.getElementById('smsPreview').textContent=r.message;toast(r.message)}catch(e){document.getElementById('smsPreview').textContent=e.message+' Bei unklarem Ergebnis zuerst das Anbieterprotokoll prüfen.';toast(e.message)}}
 async function smsOptOut(){var l=smsSelected();if(!l)return toast('Kontakt auswählen');if(!confirm('Kontakt kanalübergreifend abmelden und sperren?'))return;try{await call('/lead-status',{method:'POST',body:JSON.stringify({id:l.id,status:'opted_out'})});await loadSms();toast('Abmeldung gespeichert')}catch(e){toast(e.message)}}
 
-function renderSmsDashboardTest(t){
- if(!t)return;
- var el=document.getElementById('smsDashboardTest');
- if(!el){el=document.createElement('div');el.id='smsDashboardTest';el.className='card';document.getElementById('smsSetup').parentNode.insertBefore(el,document.getElementById('smsSetup').nextSibling);}
- el.innerHTML='<h3>Test an eigene Nummer</h3><p>+41 76 769 38 38 · einmaliger Verbindungstest</p><pre>'+esc(t.body)+'</pre><button id="smsDashboardTestSend" onclick="sendSmsDashboardTest()" '+(t.attempt||!t.available?'disabled':'')+'>Test-SMS an meine Nummer senden</button><button class="secondary" onclick="checkSmsProvider()">Verbindung prüfen (ohne SMS)</button><p id="smsDashboardTestResult" role="status">'+(t.attempt?(t.attempt.provider_code==='TLS_CONNECT_FAILURE'?'Verbindung zu ASPSMS fehlgeschlagen. Test-SMS wurde nicht übertragen.':('Test protokolliert: '+esc(t.attempt.status)+'. Kein erneuter Versand.')):'Kundenversand bleibt gesperrt.')+'</p>';
+
+var SMS_TEST_REFRESH=null;
+function smsRelayLabel(t){
+ var r=t.relay;
+ if(r&&r.delivered_at)return 'Zugestellt · '+new Date(r.delivered_at).toLocaleString('de-CH');
+ if(r)return ({queued:'Wartet auf Versandprozess · Start kann einige Minuten dauern.',claimed:'Versandprozess arbeitet · bitte nicht erneut senden.',accepted:'An ASPSMS übergeben · Zustellung noch nicht bestätigt.',rejected:'Versand abgelehnt · bitte Protokoll prüfen.',unknown:'Versandergebnis unklar · Anbieterprotokoll prüfen. Nicht erneut senden.'})[r.status]||r.status;
+ return t.attempt?'Test bereits protokolliert.':'Bereit für deinen Verbindungstest. Kundenversand bleibt gesperrt.';
 }
+function renderSmsDashboardTest(t){
+ if(!t)return;var el=document.getElementById('smsDashboardTest');
+ if(!el){el=document.createElement('div');el.id='smsDashboardTest';el.className='card';document.getElementById('smsSetup').parentNode.insertBefore(el,document.getElementById('smsSetup').nextSibling);}
+ el.innerHTML='<h3>Test an eigene Nummer</h3><p>+41 76 769 38 38 · geschützte Serveranbindung</p><pre>'+esc(t.body)+'</pre><div class="actions"><button id="smsDashboardTestSend" onclick="sendSmsDashboardTest()" '+(t.attempt||!t.available?'disabled':'')+'>Test-SMS an meine Nummer senden</button><button class="secondary" onclick="loadSms()">Versandstatus aktualisieren</button></div><p id="smsDashboardTestResult" role="status">'+esc(smsRelayLabel(t))+'</p>';
+ if(SMS_TEST_REFRESH)clearTimeout(SMS_TEST_REFRESH);
+ if(t.relay&&['queued','claimed'].includes(t.relay.status))SMS_TEST_REFRESH=setTimeout(loadSms,15000);
+}
+
 async function sendSmsDashboardTest(){
  var t=SMS_STATE&&SMS_STATE.dashboard_test;if(!t||t.attempt||!t.available)return;
  document.getElementById('smsDashboardTestSend').disabled=true;
  document.getElementById('smsDashboardTestResult').textContent='Test wird gesendet …';
- try{var r=await call('/sms/test',{method:'POST',body:JSON.stringify({phone:t.phone,body:t.body,confirm:true})});document.getElementById('smsDashboardTestResult').textContent=r.message;t.attempt={status:r.status};}
+ try{var r=await call('/sms/test',{method:'POST',body:JSON.stringify({phone:t.phone,body:t.body,confirm:true})});document.getElementById('smsDashboardTestResult').textContent=r.message;t.attempt={status:r.status};SMS_TEST_REFRESH=setTimeout(loadSms,10000);}
  catch(e){document.getElementById('smsDashboardTestResult').textContent=e.message+' Bitte Anbieterprotokoll prüfen, bevor ein weiterer Versuch erfolgt.';}
 }
 
-async function checkSmsProvider(){
- try{var r=await call('/sms/provider-check');document.getElementById('smsDashboardTestResult').textContent=r.interface==='WebAPI'?'Anbieter erreichbar. Guthabenabfrage geprüft.':'Anbieterprüfung abgeschlossen.';}
- catch(e){document.getElementById('smsDashboardTestResult').textContent=e.message;}
-}
