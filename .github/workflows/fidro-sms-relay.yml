@@ -1,0 +1,84 @@
+name: FIDRO SMS relay
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fidro-sms-relay.yml'
+      - 'sms.js'
+      - 'index.html'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: fidro-sms-relay
+  cancel-in-progress: false
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Process one protected SMS job
+        shell: bash
+        run: |
+          node <<'FIDRO_NODE'
+          const https = require('node:https');
+          const API = 'https://khgjhuvfddhpkhgbgwhg.supabase.co/functions/v1/fidro-api';
+          function provider(url, body) {
+            return new Promise((resolve,reject) => {
+              const parsed = new URL(url);
+              const req = https.request(parsed, {
+                method: body ? 'POST' : 'GET',
+                minVersion: 'TLSv1.2',
+                rejectUnauthorized: true,
+                headers: body ? {'content-type':'application/json'} : {}
+              }, res => {
+                let raw = '';
+                res.on('data', c => { raw += c; if(raw.length>1000000)res.destroy(); });
+                res.on('end', () => {try {resolve({http:res.statusCode,data:JSON.parse(raw)});}catch {reject(new Error('Invalid provider response'));}});
+              });
+              req.setTimeout(20000,()=>req.destroy(new Error('Provider timeout')));
+              req.on('error',()=>reject(new Error('Provider connection failed')));
+              if(body)req.write(JSON.stringify(body));
+              req.end();
+            });
+          }
+          (async()=>{
+           const oidc = await fetch(process.env.ACTIONS_ID_TOKEN_REQUEST_URL+'&audience=fidro-sms-relay',{headers:{Authorization:'Bearer '+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}});
+           if(!oidc.ok)throw new Error('OIDC unavailable');
+           const {value:token}=await oidc.json();
+           const headers={Authorization:'Bearer '+token,'content-type':'application/json'};
+           const claim=await fetch(API+'/sms-relay/claim',{method:'POST',headers,body:'{}'});
+           if(claim.status===204){console.log('No queued SMS.');return;}
+           if(!claim.ok)throw new Error('Relay authorization or queue unavailable: '+claim.status);
+           const job=await claim.json();
+           // Credentials stay in process memory; never log job, request URLs or provider responses.
+           let status='unknown',code=null,delivered=false,credits=null;
+           try{
+            const balance=await provider('https://json.aspsms.com/CheckCredits',{UserName:job.userkey,Password:job.password});
+            if(String(balance.data.StatusCode)!=='1') {status='rejected';code=String(balance.data.StatusCode||'BALANCE_FAILED');}
+            else {
+             credits=Number(balance.data.Credits);
+             const r=await provider('https://json.aspsms.com/SendTextSMS',{UserName:job.userkey,Password:job.password,Originator:job.sender,Recipients:[job.phone+':'+job.id],MessageText:job.body,ForceGSM7bit:true});
+             if(r.http===200&&r.data.StatusCode!==undefined){code=String(r.data.StatusCode);status=code==='1'?'accepted':'rejected';}
+             if(status==='accepted'){
+              for(let i=0;i<4;i++){
+               await new Promise(r=>setTimeout(r,3000));
+               try{
+                const url=new URL('https://webapi.aspsms.com/SendingStat03/Get');
+                url.searchParams.set('Userkey',job.userkey);url.searchParams.set('Password',job.password);url.searchParams.set('TransactionReferenceNumber',job.id);
+                const log=await provider(url);
+                if(Array.isArray(log.data)&&log.data.some(x=>x.TransactionReferenceNumber===job.id&&Number(x.DST)===0&&x.DSCTS)){delivered=true;break;}
+               }catch{}
+              }
+             }
+            }
+           }catch{} // Never repeat a send after an uncertain outcome.
+           const result=await fetch(API+'/sms-relay/complete',{method:'POST',headers,body:JSON.stringify({id:job.id,lease:job.lease,status,code,delivered,credits})});
+           if(!result.ok)throw new Error('Result recording failed; no automatic resend');
+           console.log('SMS relay result: '+status+(delivered?' / delivery confirmed':''));
+          })().catch(()=>{console.error('SMS relay stopped. Check protected dashboard status; do not repeat uncertain sends.');process.exitCode=1;});
+          
+          FIDRO_NODE
