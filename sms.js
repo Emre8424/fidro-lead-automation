@@ -90,6 +90,9 @@ async function loadSmsInbox(){ var focused=document.activeElement,shown=document
 function renderSmsInbox(data){
  var node=document.getElementById('smsInbox');
  if(!node){node=document.createElement('div');node.id='smsInbox';node.className='card';document.getElementById('smsSetup').insertAdjacentElement('afterend',node);}
+ var oldGuide=document.getElementById('smsIphoneGuide'),oldManual=document.getElementById('smsManualImport');
+ var guideOpen=!!(oldGuide&&oldGuide.open),manualOpen=!!(oldManual&&oldManual.open),saved={};
+ ['smsImportSender','smsImportAt','smsImportText'].forEach(function(id){var el=document.getElementById(id);if(el)saved[id]=el.value;});
  var labels={interest:'Interesse · noch keine Terminzusage',stop:'STOP · gesperrt',decline:'Ablehnung · archiviert und gesperrt',underage:'U18 · gesperrt',appointment:'Terminwunsch · bitte abstimmen',cost:'Frage zu Kosten',process:'Frage zum Ablauf',prize:'Frage zum Gewinnspiel',review:'Bitte prüfen'};
  var blocks={budget_limit:'30-CHF-Budget ausgeschöpft',manual_import:'Manuell übernommen · Antwort nicht automatisch versendet',human_review:'Manuelle Bearbeitung nötig',auto_reply_paused:'Automatische Antworten pausiert',sms_paused:'SMS pausiert',reply_limit:'Antwortlimit erreicht',contact_blocked:'Kontakt gesperrt',reply_already_pending:'Antwort wartet bereits',newer_reply_exists:'Neuere Antwort vorhanden',older_than_24h:'Antwort älter als 24 Stunden',provider_rejected:'Versand abgelehnt',provider_unknown:'Versand unklar – nicht erneut senden'};
  var devices=data.devices||[],last=devices.map(d=>d.last_received_at).filter(Boolean).sort().pop();
@@ -98,7 +101,7 @@ function renderSmsInbox(data){
  '<p>Automatische Bearbeitung: STOP, Ablehnungen und U18 werden gesperrt. Klare Zusagen und einfache Fragen erhalten eine passende Antwort; Terminwünsche und unklare Texte gehen an dich. Interesse zählt nicht als gebuchter Termin. Antworten laufen über ASPSMS innerhalb des gemeinsamen 30-CHF-Budgets.</p>'+
  '<div class="actions"><button class="secondary" onclick="loadSmsInbox()">Posteingang aktualisieren</button><button class="secondary" onclick="toggleSmsReplies('+(!data.auto_reply_enabled)+')">'+(data.auto_reply_enabled?'Automatische Antworten pausieren':'Automatische Antworten aktivieren')+'</button></div>'+
  '<p>Automatische Antworten sind '+(data.auto_reply_enabled?'aktiv, sobald Nachrichten vom iPhone ankommen.':'pausiert. STOP und Ablehnungen werden weiterhin verarbeitet.')+' Maximal zwei Antworten pro Kontakt in 24 Stunden, vier insgesamt. Keine automatische Terminzusage.</p>'+
- '<details><summary><b>iPhone-Weiterleitung einrichten · ohne neues Abo</b></summary><p>Nur SMS von den unten aufgeführten, bereits angeschriebenen Kontakten weiterleiten. Private Nachrichten und Einmalcodes nicht aufnehmen. Vorhandene SMS werden nicht rückwirkend geladen.</p>'+
+ '<details id="smsIphoneGuide"><summary><b>iPhone-Weiterleitung einrichten · ohne neues Abo</b></summary><p>Nur SMS von den unten aufgeführten, bereits angeschriebenen Kontakten weiterleiten. Private Nachrichten und Einmalcodes nicht aufnehmen. Vorhandene SMS werden nicht rückwirkend geladen.</p>'+
  '<div class="actions"><button onclick="createSmsBridge()">Verbindungsschlüssel für mein iPhone erstellen</button></div><div id="smsBridgeSetup"></div>'+
  '<ol><li>Auf dem iPhone „Kurzbefehle“ → „Automation“ → „+“ → „Nachricht“ öffnen.</li>'+
  '<li>Unter „Absender“ die unten aufgeführten Telefonnummern auswählen. „Nachricht enthält“ leer lassen. „Sofort ausführen“ wählen.</li>'+
@@ -109,7 +112,7 @@ function renderSmsInbox(data){
  '<p>Absender für die Automation (bei neu angeschriebenen Kontakten ergänzen):</p><ul>'+data.contacts.map(c=>'<li>'+esc(c.name)+' · '+esc(c.phone)+'</li>').join('')+'</ul>'+
  devices.map(d=>'<p>'+esc(d.name)+' · erstellt '+esc(new Date(d.created_at).toLocaleString('de-CH'))+' <button class="secondary" onclick="revokeSmsBridge(\''+d.id+'\')">Diese Verbindung deaktivieren</button></p>').join('')+
  '<p><a href="https://support.apple.com/de-de/guide/shortcuts/apdd711f9dff/ios" target="_blank" rel="noopener">Apple: Nachricht als Automation-Auslöser</a></p></details>'+
- '<details><summary><b>Antwort vom Handy übernehmen</b></summary><p>Für bereits eingegangene SMS. Die Antwort wird eingeordnet; ein Versand erfolgt erst nach deiner Freigabe.</p><label for="smsImportSender">Absender</label><select id="smsImportSender"><option value="">Kontakt auswählen</option>'+data.contacts.map(c=>'<option value="'+esc(c.phone)+'">'+esc(c.name)+' · '+esc(c.phone)+'</option>').join('')+'</select>'+
+ '<details id="smsManualImport"><summary><b>Antwort vom Handy übernehmen</b></summary><p>Für bereits eingegangene SMS. Die Antwort wird eingeordnet; ein Versand erfolgt erst nach deiner Freigabe.</p><label for="smsImportSender">Absender</label><select id="smsImportSender"><option value="">Kontakt auswählen</option>'+data.contacts.map(c=>'<option value="'+esc(c.phone)+'">'+esc(c.name)+' · '+esc(c.phone)+'</option>').join('')+'</select>'+
  '<label for="smsImportAt">Tatsächlicher Empfangszeitpunkt</label><input id="smsImportAt" type="datetime-local">'+
  '<label for="smsImportText">Empfangene SMS</label><textarea id="smsImportText" rows="4" maxlength="2000"></textarea><div class="actions"><button class="secondary" onclick="previewSmsInbound()">Nur Einordnung prüfen</button><button onclick="importSmsInbound()">Antwort speichern und bearbeiten</button></div><p id="smsImportResult" role="status"></p></details>'+
  '<div id="smsInboxThreads">'+(data.messages.length?data.messages.map((m,i)=>{
@@ -119,6 +122,8 @@ function renderSmsInbox(data){
  (m.reply_block_reason?'<p>'+esc(blocks[m.reply_block_reason]||m.reply_block_reason)+'</p>':'')+
  (!r&&m.suggested_reply?'<button onclick="approveSmsReply(\''+m.id+'\')">Antwort freigeben</button>':'')+'</details>';
  }).join(''):'<p>Noch keine SMS-Antwort im Dashboard. Ohne aktivierte iPhone-Weiterleitung ist dies keine Aussage darüber, ob Antworten auf deinem Handy liegen.</p>')+'</div>';
+ document.getElementById('smsIphoneGuide').open=guideOpen;document.getElementById('smsManualImport').open=manualOpen;
+ Object.keys(saved).forEach(function(id){document.getElementById(id).value=saved[id];});
  if(SMS_INBOX_REFRESH)clearTimeout(SMS_INBOX_REFRESH);
  SMS_INBOX_REFRESH=setTimeout(loadSmsInbox,30000);
 }
