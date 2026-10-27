@@ -24,7 +24,7 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 </style></head>
 <body>
 <header><div><b>FIDRO Lead Automation</b><div class="muted" style="color:#bbb">Kontakte. Gespräche. Termine.</div></div>
-<div class="row"><span id="pauseBadge" class="badge">-</span><details class="account-menu"><summary>Zugang</summary><div class="account-panel"><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Zugriffsschlüssel"><button class="secondary" onclick="saveToken()">Speichern</button><button class="secondary" onclick="rotateOperatorKey()">Schlüssel rotieren</button><button class="secondary" onclick="clearToken()">Abmelden</button></div></details></div></header>
+<div class="row"><span id="pauseBadge" class="badge">-</span><details class="account-menu"><summary>Zugang</summary><div class="account-panel"><input id="token" aria-label="Zugriffsschlüssel" type="password" autocomplete="off" spellcheck="false" placeholder="Zugriffsschlüssel"><button type="button" class="secondary" onclick="copyAccessKey()">Schlüssel kopieren</button><button type="button" id="accessKeyReveal" class="secondary" onclick="toggleAccessKey()" aria-pressed="false">Schlüssel anzeigen</button><button class="secondary" onclick="saveToken()">Speichern</button><button class="secondary" onclick="rotateOperatorKey()">Schlüssel rotieren</button><button class="secondary" onclick="clearToken()">Abmelden</button></div></details></div></header>
 <main>
 <nav class="nav" aria-label="Hauptnavigation">
 <button class="selected" onclick="showTab('dash')">Übersicht</button><button onclick="showTab('import')">Import</button><button onclick="showTab('leads')">Leads</button><button onclick="showTab('chats')">Chats</button><button onclick="showTab('sms')">SMS &amp; Verlauf</button><button onclick="showTab('drafts')">E-Mails</button><button onclick="showTab('audit')">Verlauf</button>
@@ -70,6 +70,41 @@ dialog{border:0;border-radius:14px;padding:0;width:min(520px,94vw)}dialog::backd
 var SUPA="https://khgjhuvfddhpkhgbgwhg.supabase.co/functions/v1", API=SUPA+"/fidro-api", SEND=SUPA+"/whatsapp-send", DASH=null, READY=null, LEADS=[], CHATS=[], ACTIVE_CHAT_ID=null, CHAT_REFRESH_TIMER=null, LEAD_FILTER="all";
 document.getElementById("token").value=localStorage.getItem("fidro_token")||"";
 function tok(){return localStorage.getItem("fidro_token")||document.getElementById("token").value.trim()}
+
+var ACCESS_KEY_HIDE_TIMER=null;
+function hideAccessKey(){
+ var field=document.getElementById("token"),button=document.getElementById("accessKeyReveal");
+ if(ACCESS_KEY_HIDE_TIMER)clearTimeout(ACCESS_KEY_HIDE_TIMER);
+ field.type="password";button.textContent="Schlüssel anzeigen";button.setAttribute("aria-pressed","false");
+}
+function toggleAccessKey(){
+ var field=document.getElementById("token"),button=document.getElementById("accessKeyReveal");
+ if(field.type==="text"){hideAccessKey();return;}
+ field.type="text";button.textContent="Schlüssel verbergen";button.setAttribute("aria-pressed","true");
+ ACCESS_KEY_HIDE_TIMER=setTimeout(hideAccessKey,30000);
+}
+async function copyAccessKey(){
+ var key=tok();if(!key){toast("Kein Zugriffsschlüssel gespeichert");return;}
+ try{
+  if(!navigator.clipboard||!navigator.clipboard.writeText)throw new Error("clipboard_unavailable");
+  await navigator.clipboard.writeText(key);
+  toast("Zugriffsschlüssel kopiert");
+ }catch(e){
+  var field=document.getElementById("token");
+  field.type="text";field.value=key;field.focus();field.select();field.setSelectionRange(0,key.length);
+  var copied=false;try{copied=document.execCommand("copy");}catch(_){}
+  if(copied){hideAccessKey();toast("Zugriffsschlüssel kopiert");}
+  else{
+   document.getElementById("accessKeyReveal").textContent="Schlüssel verbergen";
+   document.getElementById("accessKeyReveal").setAttribute("aria-pressed","true");
+   ACCESS_KEY_HIDE_TIMER=setTimeout(hideAccessKey,30000);
+   toast("Schlüssel markiert: jetzt Kopieren wählen oder ⌘C drücken");
+  }
+ }
+}
+document.querySelector(".account-menu").addEventListener("toggle",function(){if(!this.open)hideAccessKey();});
+document.addEventListener("visibilitychange",function(){if(document.hidden)hideAccessKey();});
+
 function saveToken(){localStorage.setItem("fidro_token",document.getElementById("token").value.trim());toast("Gespeichert");refreshAll()}
 function clearToken(){localStorage.removeItem("fidro_token");document.getElementById("token").value="";DASH=null;READY=null;LEADS=[];CHATS=[];ACTIVE_CHAT_ID=null;if(CHAT_REFRESH_TIMER){clearInterval(CHAT_REFRESH_TIMER);CHAT_REFRESH_TIMER=null}document.getElementById("pauseBadge").textContent="-";toast("Abgemeldet")}
 async function rotateOperatorKey(){
